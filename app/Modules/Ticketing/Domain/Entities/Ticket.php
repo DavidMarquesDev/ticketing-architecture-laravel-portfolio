@@ -6,6 +6,7 @@ declare(strict_types=1);
 namespace App\Modules\Ticketing\Domain\Entities;
 
 use App\Modules\Ticketing\Domain\Enums\TicketStatus;
+use App\Modules\Ticketing\Domain\Exceptions\TicketStateException;
 
 /**
  * Entidade de domínio para ticket.
@@ -72,7 +73,29 @@ final class Ticket
 
     public function assignTo(int $assigneeId): void
     {
+        if ($this->status === TicketStatus::CLOSED) {
+            throw new TicketStateException('Não é possível atribuir um ticket fechado.');
+        }
+
         $this->assigneeId = $assigneeId;
         $this->status = TicketStatus::PENDING;
+    }
+
+    public function reply(): void
+    {
+        if ($this->status === TicketStatus::CLOSED) {
+            throw new TicketStateException('Não é possível responder um ticket fechado.');
+        }
+
+        $this->status = TicketStatus::PENDING;
+    }
+
+    public function close(): void
+    {
+        if ($this->status === TicketStatus::CLOSED) {
+            throw new TicketStateException('Ticket já está fechado.');
+        }
+
+        $this->status = TicketStatus::CLOSED;
     }
 }

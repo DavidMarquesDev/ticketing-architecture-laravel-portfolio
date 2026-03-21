@@ -6,15 +6,22 @@ declare(strict_types=1);
 namespace App\Modules\Ticketing\Interface\Http\Controllers;
 
 use App\Modules\Ticketing\Application\DTOs\AssignTicketInputDTO;
+use App\Modules\Ticketing\Application\DTOs\CloseTicketInputDTO;
 use App\Modules\Ticketing\Application\DTOs\CreateTicketInputDTO;
 use App\Modules\Ticketing\Application\DTOs\ListTicketsInputDTO;
+use App\Modules\Ticketing\Application\DTOs\ReplyTicketInputDTO;
 use App\Modules\Ticketing\Application\Ports\In\AssignTicketUseCase;
+use App\Modules\Ticketing\Application\Ports\In\CloseTicketUseCase;
 use App\Modules\Ticketing\Application\Ports\In\CreateTicketUseCase;
 use App\Modules\Ticketing\Application\Ports\In\ListTicketsUseCase;
+use App\Modules\Ticketing\Application\Ports\In\ReplyTicketUseCase;
+use App\Modules\Ticketing\Domain\Entities\TicketComment;
 use App\Modules\Ticketing\Domain\Entities\Ticket;
 use App\Modules\Ticketing\Domain\Exceptions\TicketNotFoundException;
 use App\Modules\Ticketing\Interface\Http\Requests\AssignTicketRequest;
+use App\Modules\Ticketing\Interface\Http\Requests\CloseTicketRequest;
 use App\Modules\Ticketing\Interface\Http\Requests\ListTicketsRequest;
+use App\Modules\Ticketing\Interface\Http\Requests\ReplyTicketRequest;
 use App\Modules\Ticketing\Interface\Http\Requests\StoreTicketRequest;
 use RuntimeException;
 
@@ -47,7 +54,9 @@ final class TicketController
     public function __construct(
         private readonly CreateTicketUseCase $createTicketUseCase,
         private readonly ListTicketsUseCase $listTicketsUseCase,
-        private readonly AssignTicketUseCase $assignTicketUseCase
+        private readonly AssignTicketUseCase $assignTicketUseCase,
+        private readonly CloseTicketUseCase $closeTicketUseCase,
+        private readonly ReplyTicketUseCase $replyTicketUseCase
     ) {
     }
 
@@ -110,6 +119,48 @@ final class TicketController
         ];
     }
 
+    public function close(CloseTicketRequest $request, string $ticketId)
+    {
+        try {
+            $ticket = $this->closeTicketUseCase->execute(
+                new CloseTicketInputDTO(ticketId: $ticketId)
+            );
+        } catch (TicketNotFoundException $exception) {
+            return $this->errorResponse('TICKET_NOT_FOUND', $exception->getMessage(), 404);
+        } catch (RuntimeException $exception) {
+            return $this->errorResponse('TICKET_CONFLICT', $exception->getMessage(), 409);
+        }
+
+        return [
+            'data' => $this->serializeTicket($ticket),
+        ];
+    }
+
+    public function reply(ReplyTicketRequest $request, string $ticketId)
+    {
+        $payload = $this->payload();
+
+        try {
+            $comment = $this->replyTicketUseCase->execute(
+                new ReplyTicketInputDTO(
+                    ticketId: $ticketId,
+                    authorId: (int) ($payload['author_id'] ?? 0),
+                    message: (string) ($payload['message'] ?? '')
+                )
+            );
+        } catch (TicketNotFoundException $exception) {
+            return $this->errorResponse('TICKET_NOT_FOUND', $exception->getMessage(), 404);
+        } catch (RuntimeException $exception) {
+            return $this->errorResponse('TICKET_CONFLICT', $exception->getMessage(), 409);
+        }
+
+        http_response_code(201);
+
+        return [
+            'data' => $this->serializeComment($comment),
+        ];
+    }
+
     private function errorResponse(string $code, string $message, int $status)
     {
         http_response_code($status);
@@ -146,6 +197,17 @@ final class TicketController
             'title' => $ticket->title(),
             'description' => $ticket->description(),
             'status' => $ticket->status()->value,
+        ];
+    }
+
+    private function serializeComment(TicketComment $comment): array
+    {
+        return [
+            'id' => $comment->id(),
+            'ticket_id' => $comment->ticketId(),
+            'author_id' => $comment->authorId(),
+            'message' => $comment->message(),
+            'created_at' => $comment->createdAt(),
         ];
     }
 }
