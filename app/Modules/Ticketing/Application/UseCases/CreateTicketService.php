@@ -7,8 +7,10 @@ namespace App\Modules\Ticketing\Application\UseCases;
 
 use App\Modules\Ticketing\Application\DTOs\CreateTicketInputDTO;
 use App\Modules\Ticketing\Application\Ports\In\CreateTicketUseCase;
+use App\Modules\Ticketing\Application\Ports\Out\EventDispatcherPort;
 use App\Modules\Ticketing\Application\Ports\Out\TicketRepositoryPort;
 use App\Modules\Ticketing\Domain\Entities\Ticket;
+use App\Modules\Ticketing\Domain\Events\TicketCreated;
 
 /**
  * Serviço de aplicação para abertura de tickets.
@@ -18,7 +20,8 @@ use App\Modules\Ticketing\Domain\Entities\Ticket;
 final class CreateTicketService implements CreateTicketUseCase
 {
     public function __construct(
-        private readonly TicketRepositoryPort $ticketRepository
+        private readonly TicketRepositoryPort $ticketRepository,
+        private readonly EventDispatcherPort $eventDispatcher
     ) {
     }
 
@@ -31,7 +34,16 @@ final class CreateTicketService implements CreateTicketUseCase
             description: $input->description
         );
 
-        return $this->ticketRepository->save($ticket);
+        $savedTicket = $this->ticketRepository->save($ticket);
+
+        $this->eventDispatcher->dispatch(
+            new TicketCreated(
+                ticketId: $savedTicket->id(),
+                requesterId: $savedTicket->requesterId()
+            )
+        );
+
+        return $savedTicket;
     }
 
     private static function generateId(): string

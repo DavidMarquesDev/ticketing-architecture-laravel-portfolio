@@ -17,6 +17,7 @@ final class Ticket
     public function __construct(
         private readonly string $id,
         private readonly int $requesterId,
+        private ?int $assigneeId,
         private readonly string $title,
         private readonly string $description,
         private TicketStatus $status
@@ -32,6 +33,7 @@ final class Ticket
         return new self(
             id: $id,
             requesterId: $requesterId,
+            assigneeId: null,
             title: $title,
             description: $description,
             status: TicketStatus::OPEN
@@ -53,6 +55,11 @@ final class Ticket
         return $this->title;
     }
 
+    public function assigneeId(): ?int
+    {
+        return $this->assigneeId;
+    }
+
     public function description(): string
     {
         return $this->description;
@@ -61,5 +68,11 @@ final class Ticket
     public function status(): TicketStatus
     {
         return $this->status;
+    }
+
+    public function assignTo(int $assigneeId): void
+    {
+        $this->assigneeId = $assigneeId;
+        $this->status = TicketStatus::PENDING;
     }
 }

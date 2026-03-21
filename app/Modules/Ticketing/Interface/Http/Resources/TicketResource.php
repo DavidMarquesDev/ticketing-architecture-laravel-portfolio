@@ -23,6 +23,7 @@ final class TicketResource extends JsonResource
         return [
             'id' => $this->resource->id(),
             'requester_id' => $this->resource->requesterId(),
+            'assignee_id' => $this->resource->assigneeId(),
             'title' => $this->resource->title(),
             'description' => $this->resource->description(),
             'status' => $this->resource->status()->value,

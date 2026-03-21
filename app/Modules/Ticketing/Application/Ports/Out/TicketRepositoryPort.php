@@ -15,4 +15,11 @@ use App\Modules\Ticketing\Domain\Entities\Ticket;
 interface TicketRepositoryPort
 {
     public function save(Ticket $ticket): Ticket;
+
+    /**
+     * @return array<int, Ticket>
+     */
+    public function list(int $page, int $perPage): array;
+
+    public function findById(string $ticketId): ?Ticket;
 }
