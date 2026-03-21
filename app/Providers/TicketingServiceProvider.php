@@ -23,30 +23,60 @@ use App\Modules\Ticketing\Infrastructure\Events\LaravelEventDispatcher;
 use App\Modules\Ticketing\Infrastructure\Lock\RedisDistributedLock;
 use App\Modules\Ticketing\Infrastructure\Persistence\Repositories\InMemoryTicketRepository;
 use App\Modules\Ticketing\Infrastructure\Queue\RedisQueueDispatcher;
-use Illuminate\Support\Facades\Event;
-use Illuminate\Support\ServiceProvider;
 
 /**
  * Provider para bindings iniciais do módulo Ticketing.
  *
  * @author David Marques
  */
-final class TicketingServiceProvider extends ServiceProvider
+final class TicketingServiceProvider
 {
     public function register(): void
     {
-        $this->app->singleton(TicketRepositoryPort::class, InMemoryTicketRepository::class);
-        $this->app->bind(TicketListCachePort::class, RedisTicketListCache::class);
-        $this->app->bind(DistributedLockPort::class, RedisDistributedLock::class);
-        $this->app->bind(EventDispatcherPort::class, LaravelEventDispatcher::class);
-        $this->app->bind(QueueDispatcherPort::class, RedisQueueDispatcher::class);
-        $this->app->bind(CreateTicketUseCase::class, CreateTicketService::class);
-        $this->app->bind(ListTicketsUseCase::class, ListTicketsService::class);
-        $this->app->bind(AssignTicketUseCase::class, AssignTicketService::class);
+        $container = $this->container();
+
+        if ($container === null) {
+            return;
+        }
+
+        if (method_exists($container, 'singleton')) {
+            $container->singleton(TicketRepositoryPort::class, InMemoryTicketRepository::class);
+        }
+
+        if (method_exists($container, 'bind')) {
+            $container->bind(TicketListCachePort::class, RedisTicketListCache::class);
+            $container->bind(DistributedLockPort::class, RedisDistributedLock::class);
+            $container->bind(EventDispatcherPort::class, LaravelEventDispatcher::class);
+            $container->bind(QueueDispatcherPort::class, RedisQueueDispatcher::class);
+            $container->bind(CreateTicketUseCase::class, CreateTicketService::class);
+            $container->bind(ListTicketsUseCase::class, ListTicketsService::class);
+            $container->bind(AssignTicketUseCase::class, AssignTicketService::class);
+        }
     }
 
     public function boot(): void
     {
-        Event::listen(TicketCreated::class, HandleTicketCreated::class);
+        $container = $this->container();
+
+        if ($container === null || !method_exists($container, 'make')) {
+            return;
+        }
+
+        $dispatcher = $container->make('events');
+
+        if (is_object($dispatcher) && method_exists($dispatcher, 'listen')) {
+            $dispatcher->listen(TicketCreated::class, HandleTicketCreated::class);
+        }
+    }
+
+    private function container(): ?object
+    {
+        if (!function_exists('app')) {
+            return null;
+        }
+
+        $container = call_user_func('app');
+
+        return is_object($container) ? $container : null;
     }
 }

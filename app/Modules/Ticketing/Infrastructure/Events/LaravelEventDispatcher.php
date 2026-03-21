@@ -11,6 +11,8 @@ final class LaravelEventDispatcher implements EventDispatcherPort
 {
     public function dispatch(object $event): void
     {
-        event($event);
+        if (function_exists('event')) {
+            call_user_func('event', $event);
+        }
     }
 }

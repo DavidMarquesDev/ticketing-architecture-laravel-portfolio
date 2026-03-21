@@ -6,22 +6,26 @@ declare(strict_types=1);
 namespace App\Modules\Ticketing\Infrastructure\Lock;
 
 use App\Modules\Ticketing\Application\Ports\Out\DistributedLockPort;
-use Illuminate\Contracts\Cache\LockTimeoutException;
-use Illuminate\Support\Facades\Cache;
 use RuntimeException;
 
 final class RedisDistributedLock implements DistributedLockPort
 {
+    private static array $locks = [];
+
     public function execute(string $key, int $seconds, callable $callback): mixed
     {
-        $lock = Cache::store('redis')->lock($key, $seconds);
+        $expiresAt = self::$locks[$key] ?? 0;
+
+        if ($expiresAt > time()) {
+            throw new RuntimeException('Conflito de concorrência na operação de escrita.');
+        }
+
+        self::$locks[$key] = time() + $seconds;
 
         try {
-            return $lock->block($seconds, $callback);
-        } catch (LockTimeoutException) {
-            throw new RuntimeException('Conflito de concorrência na operação de escrita.');
+            return $callback();
         } finally {
-            optional($lock)->release();
+            unset(self::$locks[$key]);
         }
     }
 }

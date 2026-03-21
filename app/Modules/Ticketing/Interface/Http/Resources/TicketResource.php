@@ -5,20 +5,22 @@ declare(strict_types=1);
 
 namespace App\Modules\Ticketing\Interface\Http\Resources;
 
-use Illuminate\Http\Request;
-use Illuminate\Http\Resources\Json\JsonResource;
-
 /**
  * Resource HTTP para retorno de ticket.
  *
  * @author David Marques
  */
-final class TicketResource extends JsonResource
+final class TicketResource
 {
+    public function __construct(
+        private readonly object $resource
+    ) {
+    }
+
     /**
      * @return array<string, mixed>
      */
-    public function toArray(Request $request): array
+    public function toArray(mixed $request = null): array
     {
         return [
             'id' => $this->resource->id(),

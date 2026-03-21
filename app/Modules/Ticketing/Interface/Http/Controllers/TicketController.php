@@ -11,14 +11,11 @@ use App\Modules\Ticketing\Application\DTOs\ListTicketsInputDTO;
 use App\Modules\Ticketing\Application\Ports\In\AssignTicketUseCase;
 use App\Modules\Ticketing\Application\Ports\In\CreateTicketUseCase;
 use App\Modules\Ticketing\Application\Ports\In\ListTicketsUseCase;
+use App\Modules\Ticketing\Domain\Entities\Ticket;
 use App\Modules\Ticketing\Domain\Exceptions\TicketNotFoundException;
 use App\Modules\Ticketing\Interface\Http\Requests\AssignTicketRequest;
 use App\Modules\Ticketing\Interface\Http\Requests\ListTicketsRequest;
 use App\Modules\Ticketing\Interface\Http\Requests\StoreTicketRequest;
-use App\Modules\Ticketing\Interface\Http\Resources\TicketResource;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
-use Illuminate\Routing\Controller;
 use RuntimeException;
 
 /**
@@ -45,7 +42,7 @@ use RuntimeException;
  *
  * @author David Marques
  */
-final class TicketController extends Controller
+final class TicketController
 {
     public function __construct(
         private readonly CreateTicketUseCase $createTicketUseCase,
@@ -54,40 +51,52 @@ final class TicketController extends Controller
     ) {
     }
 
-    public function store(StoreTicketRequest $request): JsonResponse
+    public function store(StoreTicketRequest $request)
     {
+        $payload = $this->payload();
+        $requesterId = (int) ($payload['requester_id'] ?? 0);
+
         $ticket = $this->createTicketUseCase->execute(
             new CreateTicketInputDTO(
-                requesterId: (int) $request->user()->id,
-                title: (string) $request->string('title'),
-                description: (string) $request->string('description')
+                requesterId: $requesterId,
+                title: (string) ($payload['title'] ?? ''),
+                description: (string) ($payload['description'] ?? '')
             )
         );
 
-        return (new TicketResource($ticket))
-            ->response()
-            ->setStatusCode(201);
+        http_response_code(201);
+
+        return [
+            'data' => $this->serializeTicket($ticket),
+        ];
     }
 
-    public function index(ListTicketsRequest $request): AnonymousResourceCollection
+    public function index(ListTicketsRequest $request)
     {
         $tickets = $this->listTicketsUseCase->execute(
             new ListTicketsInputDTO(
-                page: (int) $request->integer('page', 1),
-                perPage: (int) $request->integer('per_page', 15)
+                page: (int) ($_GET['page'] ?? 1),
+                perPage: (int) ($_GET['per_page'] ?? 15)
             )
         );
 
-        return TicketResource::collection($tickets);
+        return [
+            'data' => array_map(
+                fn (Ticket $ticket): array => $this->serializeTicket($ticket),
+                $tickets
+            ),
+        ];
     }
 
-    public function assign(AssignTicketRequest $request, string $ticketId): JsonResponse
+    public function assign(AssignTicketRequest $request, string $ticketId)
     {
+        $payload = $this->payload();
+
         try {
             $ticket = $this->assignTicketUseCase->execute(
                 new AssignTicketInputDTO(
                     ticketId: $ticketId,
-                    assigneeId: (int) $request->integer('assignee_id')
+                    assigneeId: (int) ($payload['assignee_id'] ?? 0)
                 )
             );
         } catch (TicketNotFoundException $exception) {
@@ -96,20 +105,47 @@ final class TicketController extends Controller
             return $this->errorResponse('TICKET_CONFLICT', $exception->getMessage(), 409);
         }
 
-        return (new TicketResource($ticket))
-            ->response()
-            ->setStatusCode(200);
+        return [
+            'data' => $this->serializeTicket($ticket),
+        ];
     }
 
-    private function errorResponse(string $code, string $message, int $status): JsonResponse
+    private function errorResponse(string $code, string $message, int $status)
     {
-        return response()->json([
+        http_response_code($status);
+
+        return [
             'error' => [
                 'code' => $code,
                 'message' => $message,
                 'details' => [],
-                'trace_id' => request()->header('X-Trace-Id', ''),
+                'trace_id' => '',
             ],
-        ], $status);
+        ];
+    }
+
+    private function payload(): array
+    {
+        $content = file_get_contents('php://input');
+
+        if (!is_string($content) || $content === '') {
+            return [];
+        }
+
+        $decoded = json_decode($content, true);
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    private function serializeTicket(Ticket $ticket): array
+    {
+        return [
+            'id' => $ticket->id(),
+            'requester_id' => $ticket->requesterId(),
+            'assignee_id' => $ticket->assigneeId(),
+            'title' => $ticket->title(),
+            'description' => $ticket->description(),
+            'status' => $ticket->status()->value,
+        ];
     }
 }

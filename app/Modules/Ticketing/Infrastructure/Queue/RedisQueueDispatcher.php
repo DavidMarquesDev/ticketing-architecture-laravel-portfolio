@@ -11,6 +11,12 @@ final class RedisQueueDispatcher implements QueueDispatcherPort
 {
     public function dispatch(object $job): void
     {
-        dispatch($job)->onConnection('redis');
+        if (method_exists($job, 'onConnection')) {
+            $job->onConnection('redis');
+        }
+
+        if (function_exists('dispatch')) {
+            call_user_func('dispatch', $job);
+        }
     }
 }
