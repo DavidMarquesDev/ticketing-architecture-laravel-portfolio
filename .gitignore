@@ -1,1 +1,4 @@
 .trae/
+.env
+.env.*
+!.env.example
