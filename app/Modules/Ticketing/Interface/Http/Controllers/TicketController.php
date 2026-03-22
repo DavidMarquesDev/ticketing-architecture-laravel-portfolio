@@ -6,19 +6,19 @@ declare(strict_types=1);
 namespace App\Modules\Ticketing\Interface\Http\Controllers;
 
 use App\Modules\Ticketing\Application\Commands\AssignTicketCommand;
-use App\Modules\Ticketing\Application\DTOs\CloseTicketInputDTO;
-use App\Modules\Ticketing\Application\DTOs\CreateTicketInputDTO;
-use App\Modules\Ticketing\Application\DTOs\ListTicketsInputDTO;
-use App\Modules\Ticketing\Application\DTOs\ReplyTicketInputDTO;
+use App\Modules\Ticketing\Application\Commands\CloseTicketCommand;
+use App\Modules\Ticketing\Application\Commands\CreateTicketCommand;
+use App\Modules\Ticketing\Application\Commands\ReplyTicketCommand;
 use App\Modules\Ticketing\Application\Ports\In\AssignTicketCommandHandler;
-use App\Modules\Ticketing\Application\Ports\In\CloseTicketUseCase;
-use App\Modules\Ticketing\Application\Ports\In\CreateTicketUseCase;
-use App\Modules\Ticketing\Application\Ports\In\GetTicketDetailsUseCase;
-use App\Modules\Ticketing\Application\Ports\In\ListTicketCommentsUseCase;
-use App\Modules\Ticketing\Application\Ports\In\ListTicketsUseCase;
-use App\Modules\Ticketing\Application\Ports\In\ReplyTicketUseCase;
+use App\Modules\Ticketing\Application\Ports\In\CloseTicketCommandHandler;
+use App\Modules\Ticketing\Application\Ports\In\CreateTicketCommandHandler;
+use App\Modules\Ticketing\Application\Ports\In\GetTicketDetailsQueryHandler;
+use App\Modules\Ticketing\Application\Ports\In\ListTicketCommentsQueryHandler;
+use App\Modules\Ticketing\Application\Ports\In\ListTicketsQueryHandler;
+use App\Modules\Ticketing\Application\Ports\In\ReplyTicketCommandHandler;
 use App\Modules\Ticketing\Application\Queries\GetTicketDetailsQuery;
 use App\Modules\Ticketing\Application\Queries\ListTicketCommentsQuery;
+use App\Modules\Ticketing\Application\Queries\ListTicketsQuery;
 use App\Modules\Ticketing\Domain\Entities\Ticket;
 use App\Modules\Ticketing\Domain\Entities\TicketComment;
 use App\Modules\Ticketing\Domain\Exceptions\TicketNotFoundException;
@@ -61,13 +61,13 @@ use RuntimeException;
 final class TicketController
 {
     public function __construct(
-        private readonly CreateTicketUseCase $createTicketUseCase,
-        private readonly ListTicketsUseCase $listTicketsUseCase,
-        private readonly GetTicketDetailsUseCase $getTicketDetailsUseCase,
-        private readonly ListTicketCommentsUseCase $listTicketCommentsUseCase,
+        private readonly CreateTicketCommandHandler $createTicketCommandHandler,
+        private readonly ListTicketsQueryHandler $listTicketsQueryHandler,
+        private readonly GetTicketDetailsQueryHandler $getTicketDetailsQueryHandler,
+        private readonly ListTicketCommentsQueryHandler $listTicketCommentsQueryHandler,
         private readonly AssignTicketCommandHandler $assignTicketCommandHandler,
-        private readonly CloseTicketUseCase $closeTicketUseCase,
-        private readonly ReplyTicketUseCase $replyTicketUseCase
+        private readonly CloseTicketCommandHandler $closeTicketCommandHandler,
+        private readonly ReplyTicketCommandHandler $replyTicketCommandHandler
     ) {
     }
 
@@ -84,8 +84,8 @@ final class TicketController
             ? $authenticatedUser['id']
             : (int) ($payload['requester_id'] ?? 0);
 
-        $ticket = $this->createTicketUseCase->execute(
-            new CreateTicketInputDTO(
+        $ticket = $this->createTicketCommandHandler->handle(
+            new CreateTicketCommand(
                 requesterId: $requesterId,
                 title: (string) ($payload['title'] ?? ''),
                 description: (string) ($payload['description'] ?? '')
@@ -108,8 +108,8 @@ final class TicketController
         }
 
         $query = $this->queryParams($request);
-        $tickets = $this->listTicketsUseCase->execute(
-            new ListTicketsInputDTO(
+        $tickets = $this->listTicketsQueryHandler->execute(
+            new ListTicketsQuery(
                 page: (int) ($query['page'] ?? 1),
                 perPage: (int) ($query['per_page'] ?? 15),
                 status: $this->nullableString($query['status'] ?? null),
@@ -138,7 +138,7 @@ final class TicketController
         }
 
         try {
-            $ticket = $this->getTicketDetailsUseCase->execute(
+            $ticket = $this->getTicketDetailsQueryHandler->execute(
                 new GetTicketDetailsQuery($ticketId)
             );
         } catch (TicketNotFoundException $exception) {
@@ -190,8 +190,8 @@ final class TicketController
         }
 
         try {
-            $ticket = $this->closeTicketUseCase->execute(
-                new CloseTicketInputDTO(
+            $ticket = $this->closeTicketCommandHandler->handle(
+                new CloseTicketCommand(
                     ticketId: $ticketId,
                     actorUserId: (int) ($authenticatedUser['id'] ?? 0)
                 )
@@ -223,8 +223,8 @@ final class TicketController
             : (int) ($payload['author_id'] ?? 0);
 
         try {
-            $comment = $this->replyTicketUseCase->execute(
-                new ReplyTicketInputDTO(
+            $comment = $this->replyTicketCommandHandler->handle(
+                new ReplyTicketCommand(
                     ticketId: $ticketId,
                     authorId: $authorId,
                     message: (string) ($payload['message'] ?? '')
@@ -254,7 +254,7 @@ final class TicketController
         $query = $this->queryParams($request);
 
         try {
-            $comments = $this->listTicketCommentsUseCase->execute(
+            $comments = $this->listTicketCommentsQueryHandler->execute(
                 new ListTicketCommentsQuery(
                     ticketId: $ticketId,
                     page: (int) ($query['page'] ?? 1),

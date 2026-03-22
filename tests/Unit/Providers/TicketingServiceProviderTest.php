@@ -31,7 +31,19 @@ use App\Modules\Ticketing\Application\Ports\Out\EventDispatcherPort;
 use App\Modules\Ticketing\Application\Ports\Out\TicketListCachePort;
 use App\Modules\Ticketing\Application\Ports\Out\UserReadRepositoryPort;
 use App\Modules\Ticketing\Application\Ports\In\AssignTicketCommandHandler;
+use App\Modules\Ticketing\Application\Ports\In\CloseTicketCommandHandler;
+use App\Modules\Ticketing\Application\Ports\In\CreateTicketCommandHandler;
+use App\Modules\Ticketing\Application\Ports\In\GetTicketDetailsQueryHandler;
+use App\Modules\Ticketing\Application\Ports\In\ListTicketCommentsQueryHandler;
+use App\Modules\Ticketing\Application\Ports\In\ListTicketsQueryHandler;
+use App\Modules\Ticketing\Application\Ports\In\ReplyTicketCommandHandler;
 use App\Modules\Ticketing\Application\CommandHandlers\AssignTicketCommandHandler as AssignTicketCommandHandlerService;
+use App\Modules\Ticketing\Application\CommandHandlers\CloseTicketCommandHandler as CloseTicketCommandHandlerService;
+use App\Modules\Ticketing\Application\CommandHandlers\CreateTicketCommandHandler as CreateTicketCommandHandlerService;
+use App\Modules\Ticketing\Application\CommandHandlers\ReplyTicketCommandHandler as ReplyTicketCommandHandlerService;
+use App\Modules\Ticketing\Application\QueryHandlers\GetTicketDetailsQueryHandler as GetTicketDetailsQueryHandlerService;
+use App\Modules\Ticketing\Application\QueryHandlers\ListTicketCommentsQueryHandler as ListTicketCommentsQueryHandlerService;
+use App\Modules\Ticketing\Application\QueryHandlers\ListTicketsQueryHandler as ListTicketsQueryHandlerService;
 use App\Modules\Ticketing\Domain\Events\TicketClosed;
 use App\Modules\Ticketing\Domain\Events\TicketCreated;
 use App\Modules\Ticketing\Domain\Events\TicketReplied;
@@ -55,6 +67,12 @@ $tests = [
         assertSame(RedisTicketListCache::class, $container->bindings[TicketListCachePort::class] ?? null, 'Provider deve manter binding TicketListCachePort.');
         assertSame(AuthenticatedUserReadRepository::class, $container->singletons[UserReadRepositoryPort::class] ?? null, 'Provider deve registrar UserReadRepositoryPort.');
         assertSame(AssignTicketCommandHandlerService::class, $container->bindings[AssignTicketCommandHandler::class] ?? null, 'Provider deve bindar AssignTicketCommandHandler.');
+        assertSame(CloseTicketCommandHandlerService::class, $container->bindings[CloseTicketCommandHandler::class] ?? null, 'Provider deve bindar CloseTicketCommandHandler.');
+        assertSame(CreateTicketCommandHandlerService::class, $container->bindings[CreateTicketCommandHandler::class] ?? null, 'Provider deve bindar CreateTicketCommandHandler.');
+        assertSame(ReplyTicketCommandHandlerService::class, $container->bindings[ReplyTicketCommandHandler::class] ?? null, 'Provider deve bindar ReplyTicketCommandHandler.');
+        assertSame(ListTicketsQueryHandlerService::class, $container->bindings[ListTicketsQueryHandler::class] ?? null, 'Provider deve bindar ListTicketsQueryHandler.');
+        assertSame(GetTicketDetailsQueryHandlerService::class, $container->bindings[GetTicketDetailsQueryHandler::class] ?? null, 'Provider deve bindar GetTicketDetailsQueryHandler.');
+        assertSame(ListTicketCommentsQueryHandlerService::class, $container->bindings[ListTicketCommentsQueryHandler::class] ?? null, 'Provider deve bindar ListTicketCommentsQueryHandler.');
     },
     'ticketing_service_provider_boot_registers_domain_event_listeners' => static function (): void {
         $container = new FakeContainer();

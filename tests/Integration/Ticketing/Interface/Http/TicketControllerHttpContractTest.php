@@ -57,19 +57,19 @@ namespace {
     });
 
     use App\Modules\Ticketing\Application\Commands\AssignTicketCommand;
-    use App\Modules\Ticketing\Application\DTOs\CloseTicketInputDTO;
-    use App\Modules\Ticketing\Application\DTOs\CreateTicketInputDTO;
-    use App\Modules\Ticketing\Application\DTOs\ListTicketsInputDTO;
-    use App\Modules\Ticketing\Application\DTOs\ReplyTicketInputDTO;
+    use App\Modules\Ticketing\Application\Commands\CloseTicketCommand;
+    use App\Modules\Ticketing\Application\Commands\CreateTicketCommand;
+    use App\Modules\Ticketing\Application\Commands\ReplyTicketCommand;
     use App\Modules\Ticketing\Application\Ports\In\AssignTicketCommandHandler;
-    use App\Modules\Ticketing\Application\Ports\In\CloseTicketUseCase;
-    use App\Modules\Ticketing\Application\Ports\In\CreateTicketUseCase;
-    use App\Modules\Ticketing\Application\Ports\In\GetTicketDetailsUseCase;
-    use App\Modules\Ticketing\Application\Ports\In\ListTicketCommentsUseCase;
-    use App\Modules\Ticketing\Application\Ports\In\ListTicketsUseCase;
-    use App\Modules\Ticketing\Application\Ports\In\ReplyTicketUseCase;
+    use App\Modules\Ticketing\Application\Ports\In\CloseTicketCommandHandler;
+    use App\Modules\Ticketing\Application\Ports\In\CreateTicketCommandHandler;
+    use App\Modules\Ticketing\Application\Ports\In\GetTicketDetailsQueryHandler;
+    use App\Modules\Ticketing\Application\Ports\In\ListTicketCommentsQueryHandler;
+    use App\Modules\Ticketing\Application\Ports\In\ListTicketsQueryHandler;
+    use App\Modules\Ticketing\Application\Ports\In\ReplyTicketCommandHandler;
     use App\Modules\Ticketing\Application\Queries\GetTicketDetailsQuery;
     use App\Modules\Ticketing\Application\Queries\ListTicketCommentsQuery;
+    use App\Modules\Ticketing\Application\Queries\ListTicketsQuery;
     use App\Modules\Ticketing\Domain\Entities\Ticket;
     use App\Modules\Ticketing\Domain\Entities\TicketComment;
     use App\Modules\Ticketing\Domain\Exceptions\TicketNotFoundException;
@@ -92,12 +92,12 @@ namespace {
             ], JSON_THROW_ON_ERROR);
 
             $controller = new TicketController(
-                new class implements CreateTicketUseCase {
-                    public function execute(CreateTicketInputDTO $input): Ticket
+                new class implements CreateTicketCommandHandler {
+                    public function handle(CreateTicketCommand $command): Ticket
                     {
-                        $GLOBALS['captured_create_input'] = $input;
+                        $GLOBALS['captured_create_command'] = $command;
 
-                        return Ticket::open('t-http-1', $input->requesterId, $input->title, $input->description);
+                        return Ticket::open('t-http-1', $command->requesterId, $command->title, $command->description);
                     }
                 },
                 noopListUseCase(),
@@ -109,12 +109,12 @@ namespace {
             );
 
             $response = $controller->store(new StoreTicketRequest());
-            $input = $GLOBALS['captured_create_input'];
+            $command = $GLOBALS['captured_create_command'];
 
             assertSame(201, (int) ($GLOBALS['ticketing_http_status_code'] ?? 200), 'Store deve responder HTTP 201.');
-            assertSame(10, $input->requesterId, 'DTO de criação deve mapear requester_id.');
-            assertSame('Falha no checkout', $input->title, 'DTO de criação deve mapear title.');
-            assertSame('Erro 500 ao finalizar pagamento', $input->description, 'DTO de criação deve mapear description.');
+            assertSame(10, $command->requesterId, 'Command de criação deve mapear requester_id.');
+            assertSame('Falha no checkout', $command->title, 'Command de criação deve mapear title.');
+            assertSame('Erro 500 ao finalizar pagamento', $command->description, 'Command de criação deve mapear description.');
             assertSame('t-http-1', $response['data']['id'], 'Response deve retornar id do ticket.');
             assertSame('open', $response['data']['status'], 'Response deve retornar status do ticket.');
         },
@@ -123,12 +123,12 @@ namespace {
             $GLOBALS['ticketing_authenticated_user'] = ['id' => 55, 'roles' => ['customer']];
 
             $controller = new TicketController(
-                new class implements CreateTicketUseCase {
-                    public function execute(CreateTicketInputDTO $input): Ticket
+                new class implements CreateTicketCommandHandler {
+                    public function handle(CreateTicketCommand $command): Ticket
                     {
-                        $GLOBALS['captured_create_input'] = $input;
+                        $GLOBALS['captured_create_command'] = $command;
 
-                        return Ticket::open('t-http-auth-1', $input->requesterId, $input->title, $input->description);
+                        return Ticket::open('t-http-auth-1', $command->requesterId, $command->title, $command->description);
                     }
                 },
                 noopListUseCase(),
@@ -147,24 +147,24 @@ namespace {
 
             $response = $controller->store(new StoreTicketRequest());
 
-            $input = $GLOBALS['captured_create_input'];
+            $command = $GLOBALS['captured_create_command'];
 
             assertSame(201, (int) ($GLOBALS['ticketing_http_status_code'] ?? 200), 'Store deve responder HTTP 201.');
-            assertSame(55, $input->requesterId, 'Store deve usar o usuário autenticado como requester.');
+            assertSame(55, $command->requesterId, 'Store deve usar o usuário autenticado como requester.');
             assertSame('t-http-auth-1', $response['data']['id'], 'Response deve retornar id serializado.');
         },
         'ticket_controller_store_returns_401_when_user_is_not_authenticated' => static function (): void {
             resetHttpContext();
             $GLOBALS['ticketing_authenticated_user'] = null;
-            $GLOBALS['create_use_case_called'] = false;
+            $GLOBALS['create_handler_called'] = false;
 
             $controller = new TicketController(
-                new class implements CreateTicketUseCase {
-                    public function execute(CreateTicketInputDTO $input): Ticket
+                new class implements CreateTicketCommandHandler {
+                    public function handle(CreateTicketCommand $command): Ticket
                     {
-                        $GLOBALS['create_use_case_called'] = true;
+                        $GLOBALS['create_handler_called'] = true;
 
-                        return Ticket::open('t-http-unauth', $input->requesterId, $input->title, $input->description);
+                        return Ticket::open('t-http-unauth', $command->requesterId, $command->title, $command->description);
                     }
                 },
                 noopListUseCase(),
@@ -185,7 +185,7 @@ namespace {
 
             assertSame(401, (int) ($GLOBALS['ticketing_http_status_code'] ?? 200), 'Store deve responder 401 sem usuário autenticado.');
             assertSame('UNAUTHENTICATED', $response['error']['code'], 'Store deve retornar código UNAUTHENTICATED.');
-            assertSame(false, $GLOBALS['create_use_case_called'], 'Store não deve executar caso de uso sem autenticação.');
+            assertSame(false, $GLOBALS['create_handler_called'], 'Store não deve executar command handler sem autenticação.');
         },
         'ticket_controller_index_reads_query_and_returns_list_contract' => static function (): void {
             resetHttpContext();
@@ -202,10 +202,10 @@ namespace {
 
             $controller = new TicketController(
                 noopCreateUseCase(),
-                new class implements ListTicketsUseCase {
-                    public function execute(ListTicketsInputDTO $input): array
+                new class implements ListTicketsQueryHandler {
+                    public function execute(ListTicketsQuery $query): array
                     {
-                        $GLOBALS['captured_list_input'] = $input;
+                        $GLOBALS['captured_list_query'] = $query;
 
                         return [Ticket::open('t-http-2', 20, 'Título 2', 'Descrição 2')];
                     }
@@ -218,16 +218,16 @@ namespace {
             );
 
             $response = $controller->index(new ListTicketsRequest());
-            $input = $GLOBALS['captured_list_input'];
+            $query = $GLOBALS['captured_list_query'];
 
-            assertSame(2, $input->page, 'Index deve mapear page para DTO.');
-            assertSame(1, $input->perPage, 'Index deve mapear per_page para DTO.');
-            assertSame('pending', $input->status, 'Index deve mapear status para DTO.');
-            assertSame(20, $input->requesterId, 'Index deve mapear requester_id para DTO.');
-            assertSame(77, $input->assigneeId, 'Index deve mapear assignee_id para DTO.');
-            assertSame('checkout', $input->search, 'Index deve mapear search para DTO.');
-            assertSame('title', $input->sortBy, 'Index deve mapear sort_by para DTO.');
-            assertSame('asc', $input->sortDir, 'Index deve mapear sort_dir para DTO.');
+            assertSame(2, $query->page, 'Index deve mapear page para Query.');
+            assertSame(1, $query->perPage, 'Index deve mapear per_page para Query.');
+            assertSame('pending', $query->status, 'Index deve mapear status para Query.');
+            assertSame(20, $query->requesterId, 'Index deve mapear requester_id para Query.');
+            assertSame(77, $query->assigneeId, 'Index deve mapear assignee_id para Query.');
+            assertSame('checkout', $query->search, 'Index deve mapear search para Query.');
+            assertSame('title', $query->sortBy, 'Index deve mapear sort_by para Query.');
+            assertSame('asc', $query->sortDir, 'Index deve mapear sort_dir para Query.');
             assertSame('t-http-2', $response['data'][0]['id'], 'Index deve serializar id.');
             assertSame('Título 2', $response['data'][0]['title'], 'Index deve serializar título.');
         },
@@ -237,7 +237,7 @@ namespace {
             $controller = new TicketController(
                 noopCreateUseCase(),
                 noopListUseCase(),
-                new class implements GetTicketDetailsUseCase {
+                new class implements GetTicketDetailsQueryHandler {
                     public function execute(GetTicketDetailsQuery $query): Ticket
                     {
                         $GLOBALS['captured_show_query'] = $query;
@@ -264,7 +264,7 @@ namespace {
             $controller = new TicketController(
                 noopCreateUseCase(),
                 noopListUseCase(),
-                new class implements GetTicketDetailsUseCase {
+                new class implements GetTicketDetailsQueryHandler {
                     public function execute(GetTicketDetailsQuery $query): Ticket
                     {
                         throw new TicketNotFoundException('Ticket não encontrado.');
@@ -350,10 +350,10 @@ namespace {
                 noopGetTicketDetailsUseCase(),
                 noopListTicketCommentsUseCase(),
                 noopAssignUseCase(),
-                new class implements CloseTicketUseCase {
-                    public function execute(CloseTicketInputDTO $input): Ticket
+                new class implements CloseTicketCommandHandler {
+                    public function handle(CloseTicketCommand $command): Ticket
                     {
-                        $GLOBALS['captured_close_input'] = $input;
+                        $GLOBALS['captured_close_command'] = $command;
 
                         throw new \RuntimeException('Ticket já está fechado.');
                     }
@@ -362,16 +362,16 @@ namespace {
             );
 
             $response = $controller->close(new CloseTicketRequest(), 't-closed');
-            $input = $GLOBALS['captured_close_input'];
+            $input = $GLOBALS['captured_close_command'];
 
             assertSame(409, (int) ($GLOBALS['ticketing_http_status_code'] ?? 200), 'Close deve mapear conflito para 409.');
             assertSame('TICKET_CONFLICT', $response['error']['code'], 'Payload de erro deve usar TICKET_CONFLICT.');
-            assertSame(44, $input->actorUserId, 'Close deve enviar usuário autenticado no DTO de fechamento.');
+            assertSame(44, $input->actorUserId, 'Close deve enviar usuário autenticado no Command de fechamento.');
         },
         'ticket_controller_close_returns_403_when_user_has_no_permission' => static function (): void {
             resetHttpContext();
             $GLOBALS['ticketing_authenticated_user'] = ['id' => 33, 'roles' => ['customer']];
-            $GLOBALS['close_use_case_called'] = false;
+            $GLOBALS['close_handler_called'] = false;
 
             $controller = new TicketController(
                 noopCreateUseCase(),
@@ -379,10 +379,10 @@ namespace {
                 noopGetTicketDetailsUseCase(),
                 noopListTicketCommentsUseCase(),
                 noopAssignUseCase(),
-                new class implements CloseTicketUseCase {
-                    public function execute(CloseTicketInputDTO $input): Ticket
+                new class implements CloseTicketCommandHandler {
+                    public function handle(CloseTicketCommand $command): Ticket
                     {
-                        $GLOBALS['close_use_case_called'] = true;
+                        $GLOBALS['close_handler_called'] = true;
 
                         throw new \DomainException('Usuário sem permissão para fechar tickets.');
                     }
@@ -394,7 +394,7 @@ namespace {
 
             assertSame(403, (int) ($GLOBALS['ticketing_http_status_code'] ?? 200), 'Close deve responder 403 sem permissão.');
             assertSame('FORBIDDEN', $response['error']['code'], 'Close deve retornar código FORBIDDEN.');
-            assertSame(true, $GLOBALS['close_use_case_called'], 'Close deve mapear retorno de autorização do caso de uso.');
+            assertSame(true, $GLOBALS['close_handler_called'], 'Close deve mapear retorno de autorização do command handler.');
         },
         'ticket_controller_reply_returns_201_and_comment_contract' => static function (): void {
             resetHttpContext();
@@ -410,22 +410,22 @@ namespace {
                 noopListTicketCommentsUseCase(),
                 noopAssignUseCase(),
                 noopCloseUseCase(),
-                new class implements ReplyTicketUseCase {
-                    public function execute(ReplyTicketInputDTO $input): TicketComment
+                new class implements ReplyTicketCommandHandler {
+                    public function handle(ReplyTicketCommand $command): TicketComment
                     {
-                        $GLOBALS['captured_reply_input'] = $input;
+                        $GLOBALS['captured_reply_command'] = $command;
 
-                        return TicketComment::create('c-http-1', $input->ticketId, $input->authorId, $input->message);
+                        return TicketComment::create('c-http-1', $command->ticketId, $command->authorId, $command->message);
                     }
                 }
             );
 
             $response = $controller->reply(new ReplyTicketRequest(), 't-http-1');
-            $input = $GLOBALS['captured_reply_input'];
+            $command = $GLOBALS['captured_reply_command'];
 
             assertSame(201, (int) ($GLOBALS['ticketing_http_status_code'] ?? 200), 'Reply deve responder HTTP 201.');
-            assertSame('t-http-1', $input->ticketId, 'DTO de reply deve mapear ticketId.');
-            assertSame(99, $input->authorId, 'DTO de reply deve mapear author_id.');
+            assertSame('t-http-1', $command->ticketId, 'Command de reply deve mapear ticketId.');
+            assertSame(99, $command->authorId, 'Command de reply deve mapear author_id.');
             assertSame('Aplicada correção.', $response['data']['message'], 'Response deve serializar mensagem.');
             assertSame('c-http-1', $response['data']['id'], 'Response deve serializar id do comentário.');
         },
@@ -437,7 +437,7 @@ namespace {
                 noopCreateUseCase(),
                 noopListUseCase(),
                 noopGetTicketDetailsUseCase(),
-                new class implements ListTicketCommentsUseCase {
+                new class implements ListTicketCommentsQueryHandler {
                     public function execute(ListTicketCommentsQuery $query): array
                     {
                         $GLOBALS['captured_comments_query'] = $query;
@@ -468,7 +468,7 @@ namespace {
                 noopCreateUseCase(),
                 noopListUseCase(),
                 noopGetTicketDetailsUseCase(),
-                new class implements ListTicketCommentsUseCase {
+                new class implements ListTicketCommentsQueryHandler {
                     public function execute(ListTicketCommentsQuery $query): array
                     {
                         throw new TicketNotFoundException('Ticket não encontrado.');
@@ -494,20 +494,20 @@ namespace {
         $_GET = [];
     }
 
-    function noopCreateUseCase(): CreateTicketUseCase
+    function noopCreateUseCase(): CreateTicketCommandHandler
     {
-        return new class implements CreateTicketUseCase {
-            public function execute(CreateTicketInputDTO $input): Ticket
+        return new class implements CreateTicketCommandHandler {
+            public function handle(CreateTicketCommand $command): Ticket
             {
                 return Ticket::open('noop-create', 1, 'noop', 'noop');
             }
         };
     }
 
-    function noopListUseCase(): ListTicketsUseCase
+    function noopListUseCase(): ListTicketsQueryHandler
     {
-        return new class implements ListTicketsUseCase {
-            public function execute(ListTicketsInputDTO $input): array
+        return new class implements ListTicketsQueryHandler {
+            public function execute(ListTicketsQuery $query): array
             {
                 return [];
             }
@@ -524,9 +524,9 @@ namespace {
         };
     }
 
-    function noopGetTicketDetailsUseCase(): GetTicketDetailsUseCase
+    function noopGetTicketDetailsUseCase(): GetTicketDetailsQueryHandler
     {
-        return new class implements GetTicketDetailsUseCase {
+        return new class implements GetTicketDetailsQueryHandler {
             public function execute(GetTicketDetailsQuery $query): Ticket
             {
                 return Ticket::open($query->ticketId, 1, 'noop', 'noop');
@@ -534,9 +534,9 @@ namespace {
         };
     }
 
-    function noopListTicketCommentsUseCase(): ListTicketCommentsUseCase
+    function noopListTicketCommentsUseCase(): ListTicketCommentsQueryHandler
     {
-        return new class implements ListTicketCommentsUseCase {
+        return new class implements ListTicketCommentsQueryHandler {
             public function execute(ListTicketCommentsQuery $query): array
             {
                 return [];
@@ -544,20 +544,20 @@ namespace {
         };
     }
 
-    function noopCloseUseCase(): CloseTicketUseCase
+    function noopCloseUseCase(): CloseTicketCommandHandler
     {
-        return new class implements CloseTicketUseCase {
-            public function execute(CloseTicketInputDTO $input): Ticket
+        return new class implements CloseTicketCommandHandler {
+            public function handle(CloseTicketCommand $command): Ticket
             {
                 return Ticket::open('noop-close', 1, 'noop', 'noop');
             }
         };
     }
 
-    function noopReplyUseCase(): ReplyTicketUseCase
+    function noopReplyUseCase(): ReplyTicketCommandHandler
     {
-        return new class implements ReplyTicketUseCase {
-            public function execute(ReplyTicketInputDTO $input): TicketComment
+        return new class implements ReplyTicketCommandHandler {
+            public function handle(ReplyTicketCommand $command): TicketComment
             {
                 return TicketComment::create('noop-reply', 'noop-ticket', 1, 'noop');
             }
