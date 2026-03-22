@@ -8,10 +8,12 @@ namespace App\Modules\Ticketing\Application\UseCases;
 use App\Modules\Ticketing\Application\DTOs\AssignTicketInputDTO;
 use App\Modules\Ticketing\Application\Ports\In\AssignTicketUseCase;
 use App\Modules\Ticketing\Application\Ports\Out\DistributedLockPort;
+use App\Modules\Ticketing\Application\Ports\Out\EventDispatcherPort;
 use App\Modules\Ticketing\Application\Ports\Out\TicketListCachePort;
 use App\Modules\Ticketing\Application\Ports\Out\TicketRepositoryPort;
 use App\Modules\Ticketing\Application\Ports\Out\UserReadRepositoryPort;
 use App\Modules\Ticketing\Domain\Entities\Ticket;
+use App\Modules\Ticketing\Domain\Events\TicketAssigned;
 use App\Modules\Ticketing\Domain\Exceptions\TicketNotFoundException;
 use DomainException;
 
@@ -23,7 +25,8 @@ final class AssignTicketService implements AssignTicketUseCase
         private readonly TicketRepositoryPort $ticketRepository,
         private readonly TicketListCachePort $ticketListCache,
         private readonly DistributedLockPort $lock,
-        private readonly UserReadRepositoryPort $userReadRepository
+        private readonly UserReadRepositoryPort $userReadRepository,
+        private readonly EventDispatcherPort $eventDispatcher
     ) {
     }
 
@@ -47,6 +50,13 @@ final class AssignTicketService implements AssignTicketUseCase
                 $savedTicket = $this->ticketRepository->save($ticket);
 
                 $this->ticketListCache->forgetAll();
+                $this->eventDispatcher->dispatch(
+                    new TicketAssigned(
+                        ticketId: $savedTicket->id(),
+                        assigneeId: $input->assigneeId,
+                        actorUserId: $input->actorUserId
+                    )
+                );
 
                 return $savedTicket;
             }

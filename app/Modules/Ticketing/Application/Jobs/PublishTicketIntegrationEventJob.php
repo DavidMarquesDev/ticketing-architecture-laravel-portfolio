@@ -5,6 +5,8 @@ declare(strict_types=1);
 
 namespace App\Modules\Ticketing\Application\Jobs;
 
+use App\Modules\Ticketing\Infrastructure\Observability\StructuredLogger;
+
 final class PublishTicketIntegrationEventJob
 {
     public function __construct(
@@ -15,18 +17,14 @@ final class PublishTicketIntegrationEventJob
 
     public function handle(): void
     {
-        $encodedPayload = json_encode($this->payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-
-        if (!is_string($encodedPayload)) {
-            $encodedPayload = '{}';
-        }
-
-        error_log(
-            sprintf(
-                'ticket.integration.event name=%s payload=%s',
-                $this->eventName,
-                $encodedPayload
-            )
+        StructuredLogger::log(
+            type: 'ticket_integration_event',
+            payload: [
+                'event_name' => $this->eventName,
+                'payload' => $this->payload,
+                'trace_id' => is_string($this->payload['trace_id'] ?? null) ? $this->payload['trace_id'] : null,
+                'correlation_id' => is_string($this->payload['correlation_id'] ?? null) ? $this->payload['correlation_id'] : null,
+            ]
         );
     }
 }

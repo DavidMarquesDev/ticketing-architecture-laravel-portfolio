@@ -231,6 +231,10 @@ namespace {
             assertSame('asc', $query->sortDir, 'Index deve mapear sort_dir para Query.');
             assertSame('t-http-2', $response['data'][0]['id'], 'Index deve serializar id.');
             assertSame('Título 2', $response['data'][0]['title'], 'Index deve serializar título.');
+            assertSame(2, $response['meta']['page'] ?? null, 'Index deve retornar meta de paginação com page.');
+            assertSame(1, $response['meta']['per_page'] ?? null, 'Index deve retornar meta de paginação com per_page.');
+            assertSame(1, $response['meta']['count'] ?? null, 'Index deve retornar meta de paginação com count.');
+            assertSame(true, $response['meta']['has_more'] ?? null, 'Index deve retornar meta de paginação com has_more.');
         },
         'ticket_controller_show_returns_200_and_data_contract' => static function (): void {
             resetHttpContext();
@@ -464,6 +468,10 @@ namespace {
             assertSame(1, $query->perPage, 'Comments deve mapear per_page para Query.');
             assertSame('c-http-list-1', $response['data'][0]['id'], 'Comments deve serializar id do comentário.');
             assertSame('Primeira mensagem', $response['data'][0]['message'], 'Comments deve serializar mensagem.');
+            assertSame(2, $response['meta']['page'] ?? null, 'Comments deve retornar meta de paginação com page.');
+            assertSame(1, $response['meta']['per_page'] ?? null, 'Comments deve retornar meta de paginação com per_page.');
+            assertSame(1, $response['meta']['count'] ?? null, 'Comments deve retornar meta de paginação com count.');
+            assertSame(true, $response['meta']['has_more'] ?? null, 'Comments deve retornar meta de paginação com has_more.');
         },
         'ticket_controller_comments_maps_not_found_to_404' => static function (): void {
             resetHttpContext();

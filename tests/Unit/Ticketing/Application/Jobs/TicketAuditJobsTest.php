@@ -33,9 +33,10 @@ $tests = [
             $job->handle();
             $logContent = (string) file_get_contents($logPath);
 
-            assertTrue(str_contains($logContent, 'ticket.created.audit'), 'Job de criação deve registrar evento de auditoria.');
-            assertTrue(str_contains($logContent, 'ticket_id=t-job-1'), 'Job de criação deve registrar ticket_id.');
-            assertTrue(str_contains($logContent, 'requester_id=21'), 'Job de criação deve registrar requester_id.');
+            assertTrue(str_contains($logContent, '"type":"ticket_audit"'), 'Job de criação deve registrar tipo estruturado.');
+            assertTrue(str_contains($logContent, '"action":"created"'), 'Job de criação deve registrar action created.');
+            assertTrue(str_contains($logContent, '"ticket_id":"t-job-1"'), 'Job de criação deve registrar ticket_id.');
+            assertTrue(str_contains($logContent, '"requester_id":21'), 'Job de criação deve registrar requester_id.');
         } finally {
             ini_set('error_log', is_string($previousLogPath) ? $previousLogPath : '');
             removeFileIfExists($logPath);
@@ -51,10 +52,10 @@ $tests = [
             $job->handle();
             $logContent = (string) file_get_contents($logPath);
 
-            assertTrue(str_contains($logContent, 'ticket.lifecycle.audit'), 'Job de ciclo de vida deve registrar auditoria.');
-            assertTrue(str_contains($logContent, 'action=closed'), 'Job de ciclo de vida deve registrar action.');
-            assertTrue(str_contains($logContent, 'ticket_id=t-job-2'), 'Job de ciclo de vida deve registrar ticket_id.');
-            assertTrue(str_contains($logContent, 'actor_id=null'), 'Job de ciclo de vida sem ator deve registrar actor_id null.');
+            assertTrue(str_contains($logContent, '"type":"ticket_lifecycle_audit"'), 'Job de ciclo de vida deve registrar tipo estruturado.');
+            assertTrue(str_contains($logContent, '"action":"closed"'), 'Job de ciclo de vida deve registrar action.');
+            assertTrue(str_contains($logContent, '"ticket_id":"t-job-2"'), 'Job de ciclo de vida deve registrar ticket_id.');
+            assertTrue(str_contains($logContent, '"actor_id":null'), 'Job de ciclo de vida sem ator deve registrar actor_id null.');
         } finally {
             ini_set('error_log', is_string($previousLogPath) ? $previousLogPath : '');
             removeFileIfExists($logPath);
@@ -70,9 +71,9 @@ $tests = [
             $job->handle();
             $logContent = (string) file_get_contents($logPath);
 
-            assertTrue(str_contains($logContent, 'action=replied'), 'Job de reply deve registrar action replied.');
-            assertTrue(str_contains($logContent, 'ticket_id=t-job-3'), 'Job de reply deve registrar ticket_id.');
-            assertTrue(str_contains($logContent, 'actor_id=99'), 'Job de reply deve registrar actor_id.');
+            assertTrue(str_contains($logContent, '"action":"replied"'), 'Job de reply deve registrar action replied.');
+            assertTrue(str_contains($logContent, '"ticket_id":"t-job-3"'), 'Job de reply deve registrar ticket_id.');
+            assertTrue(str_contains($logContent, '"actor_id":99'), 'Job de reply deve registrar actor_id.');
         } finally {
             ini_set('error_log', is_string($previousLogPath) ? $previousLogPath : '');
             removeFileIfExists($logPath);
@@ -95,8 +96,8 @@ $tests = [
             $job->handle();
             $logContent = (string) file_get_contents($logPath);
 
-            assertTrue(str_contains($logContent, 'ticket.integration.event'), 'Job de integração deve registrar tipo de log esperado.');
-            assertTrue(str_contains($logContent, 'name=ticket.replied.v1'), 'Job de integração deve registrar nome do evento.');
+            assertTrue(str_contains($logContent, '"type":"ticket_integration_event"'), 'Job de integração deve registrar tipo de log esperado.');
+            assertTrue(str_contains($logContent, '"event_name":"ticket.replied.v1"'), 'Job de integração deve registrar nome do evento.');
             assertTrue(str_contains($logContent, '"ticket_id":"t-job-4"'), 'Job de integração deve registrar ticket_id no payload.');
             assertTrue(str_contains($logContent, '"comment_id":"c-job-1"'), 'Job de integração deve registrar comment_id no payload.');
             assertTrue(str_contains($logContent, '"author_id":77'), 'Job de integração deve registrar author_id no payload.');

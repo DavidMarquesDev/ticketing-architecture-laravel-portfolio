@@ -21,6 +21,7 @@ spl_autoload_register(static function (string $class): void {
 use App\Modules\Ticketing\Application\Listeners\HandleTicketClosed;
 use App\Modules\Ticketing\Application\Listeners\HandleTicketCreated;
 use App\Modules\Ticketing\Application\Listeners\HandleTicketReplied;
+use App\Modules\Ticketing\Application\Listeners\HandleTicketAssigned;
 use App\Modules\Ticketing\Application\Jobs\PublishTicketAuditJob;
 use App\Modules\Ticketing\Application\Jobs\PublishTicketLifecycleAuditJob;
 use App\Modules\Ticketing\Application\Ports\Out\IntegrationEventPublisherPort;
@@ -29,6 +30,7 @@ use App\Modules\Ticketing\Application\Ports\Out\TicketListCachePort;
 use App\Modules\Ticketing\Domain\Events\TicketClosed;
 use App\Modules\Ticketing\Domain\Events\TicketCreated;
 use App\Modules\Ticketing\Domain\Events\TicketReplied;
+use App\Modules\Ticketing\Domain\Events\TicketAssigned;
 
 $tests = [
     'handle_ticket_created_forgets_cache_and_dispatches_created_audit_job' => static function (): void {
@@ -80,6 +82,24 @@ $tests = [
         assertSame('t-listener-3', $integrationPublisher->lastPayload['ticket_id'] ?? null, 'Evento de integração de resposta deve conter ticket_id.');
         assertSame('c-listener-1', $integrationPublisher->lastPayload['comment_id'] ?? null, 'Evento de integração de resposta deve conter comment_id.');
         assertSame(88, $integrationPublisher->lastPayload['author_id'] ?? null, 'Evento de integração de resposta deve conter author_id.');
+    },
+    'handle_ticket_assigned_forgets_cache_and_dispatches_lifecycle_job_with_actor' => static function (): void {
+        $cache = new FakeListenerTicketListCache();
+        $queue = new FakeListenerQueueDispatcher();
+        $integrationPublisher = new FakeIntegrationEventPublisher();
+        $listener = new HandleTicketAssigned($cache, $queue, $integrationPublisher);
+
+        $listener->handle(new TicketAssigned('t-listener-4', 55, 77));
+
+        assertTrue($cache->forgetCalled, 'Listener de atribuição deve invalidar cache.');
+        assertTrue($queue->lastJob instanceof PublishTicketLifecycleAuditJob, 'Listener de atribuição deve despachar PublishTicketLifecycleAuditJob.');
+        assertSame('t-listener-4', $queue->lastJob->ticketId, 'Job de atribuição deve conter ticketId.');
+        assertSame('assigned', $queue->lastJob->action, 'Job de atribuição deve conter action assigned.');
+        assertSame(77, $queue->lastJob->actorId, 'Job de atribuição deve conter actorId.');
+        assertSame('ticket.assigned.v1', $integrationPublisher->lastEventName, 'Listener de atribuição deve publicar evento de integração ticket.assigned.v1.');
+        assertSame('t-listener-4', $integrationPublisher->lastPayload['ticket_id'] ?? null, 'Evento de integração de atribuição deve conter ticket_id.');
+        assertSame(55, $integrationPublisher->lastPayload['assignee_id'] ?? null, 'Evento de integração de atribuição deve conter assignee_id.');
+        assertSame(77, $integrationPublisher->lastPayload['actor_user_id'] ?? null, 'Evento de integração de atribuição deve conter actor_user_id.');
     },
 ];
 

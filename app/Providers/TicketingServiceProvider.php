@@ -8,6 +8,7 @@ namespace App\Providers;
 use App\Modules\Ticketing\Application\Listeners\HandleTicketCreated;
 use App\Modules\Ticketing\Application\Listeners\HandleTicketClosed;
 use App\Modules\Ticketing\Application\Listeners\HandleTicketReplied;
+use App\Modules\Ticketing\Application\Listeners\HandleTicketAssigned;
 use App\Modules\Ticketing\Application\Ports\In\AssignTicketCommandHandler;
 use App\Modules\Ticketing\Application\Ports\In\AssignTicketUseCase;
 use App\Modules\Ticketing\Application\Ports\In\CloseTicketCommandHandler;
@@ -48,6 +49,8 @@ use App\Modules\Ticketing\Application\UseCases\ReplyTicketService;
 use App\Modules\Ticketing\Domain\Events\TicketClosed;
 use App\Modules\Ticketing\Domain\Events\TicketCreated;
 use App\Modules\Ticketing\Domain\Events\TicketReplied;
+use App\Modules\Ticketing\Domain\Events\TicketAssigned;
+use App\Modules\Ticketing\Interface\Http\Policies\TicketPolicy;
 use App\Modules\Ticketing\Infrastructure\Cache\RedisCacheStore;
 use App\Modules\Ticketing\Infrastructure\Cache\RedisTicketListCache;
 use App\Modules\Ticketing\Infrastructure\Events\LaravelEventDispatcher;
@@ -128,7 +131,11 @@ final class TicketingServiceProvider
             $dispatcher->listen(TicketCreated::class, HandleTicketCreated::class);
             $dispatcher->listen(TicketClosed::class, HandleTicketClosed::class);
             $dispatcher->listen(TicketReplied::class, HandleTicketReplied::class);
+            $dispatcher->listen(TicketAssigned::class, HandleTicketAssigned::class);
         }
+
+        $this->registerAuthorization();
+        $this->registerRateLimiter();
     }
 
     private function container(): ?object
@@ -145,5 +152,153 @@ final class TicketingServiceProvider
     private function supportsEloquent(): bool
     {
         return class_exists('Illuminate\Database\Eloquent\Model');
+    }
+
+    private function registerAuthorization(): void
+    {
+        $gateFacade = '\Illuminate\Support\Facades\Gate';
+
+        if (!class_exists($gateFacade) || !method_exists($gateFacade, 'define')) {
+            return;
+        }
+
+        $policy = new TicketPolicy();
+
+        $gateFacade::define('ticket.assign', static fn (mixed $user): bool => $policy->assign($user));
+        $gateFacade::define('ticket.close', static fn (mixed $user): bool => $policy->close($user));
+        $gateFacade::define('ticket.reply', static fn (mixed $user): bool => $policy->reply($user));
+    }
+
+    private function registerRateLimiter(): void
+    {
+        $rateLimiter = '\Illuminate\Support\Facades\RateLimiter';
+        $limitClass = '\Illuminate\Cache\RateLimiting\Limit';
+
+        if (!class_exists($rateLimiter) || !class_exists($limitClass) || !method_exists($rateLimiter, 'for')) {
+            return;
+        }
+
+        $readLimit = $this->resolveRateLimit('TICKETING_RATE_LIMIT_READ', 120);
+        $indexLimit = $this->resolveRateLimit('TICKETING_RATE_LIMIT_INDEX', 90);
+        $showLimit = $this->resolveRateLimit('TICKETING_RATE_LIMIT_SHOW', 180);
+        $commentsLimit = $this->resolveRateLimit('TICKETING_RATE_LIMIT_COMMENTS', 100);
+        $writeLimit = $this->resolveRateLimit('TICKETING_RATE_LIMIT_WRITE', 40);
+        $createLimit = $this->resolveRateLimit('TICKETING_RATE_LIMIT_CREATE', 40);
+        $assignLimit = $this->resolveRateLimit('TICKETING_RATE_LIMIT_ASSIGN', 25);
+        $closeLimit = $this->resolveRateLimit('TICKETING_RATE_LIMIT_CLOSE', 25);
+        $replyLimit = $this->resolveRateLimit('TICKETING_RATE_LIMIT_REPLY', 35);
+
+        $rateLimiter::for(
+            'ticketing',
+            static function (object $request) use (
+                $limitClass,
+                $readLimit,
+                $indexLimit,
+                $showLimit,
+                $commentsLimit,
+                $writeLimit,
+                $createLimit,
+                $assignLimit,
+                $closeLimit,
+                $replyLimit
+            ): object {
+                $resolvedUser = null;
+
+                if (method_exists($request, 'user')) {
+                    $resolvedUser = $request->user();
+                }
+
+                $resolvedUserId = 0;
+
+                if (is_array($resolvedUser)) {
+                    $resolvedUserId = (int) ($resolvedUser['id'] ?? 0);
+                } elseif (is_object($resolvedUser) && method_exists($resolvedUser, 'getAuthIdentifier')) {
+                    $resolvedUserId = (int) $resolvedUser->getAuthIdentifier();
+                } elseif (is_object($resolvedUser) && property_exists($resolvedUser, 'id')) {
+                    $resolvedUserId = (int) $resolvedUser->id;
+                }
+
+                $requestMethod = method_exists($request, 'getMethod')
+                    ? strtoupper((string) $request->getMethod())
+                    : '';
+                $rawPath = '';
+
+                if (method_exists($request, 'path')) {
+                    $rawPath = (string) $request->path();
+                } elseif (method_exists($request, 'getPathInfo')) {
+                    $rawPath = (string) $request->getPathInfo();
+                } elseif (method_exists($request, 'server')) {
+                    $rawPath = (string) $request->server('REQUEST_URI', '');
+                }
+
+                $normalizedPath = strtolower(trim(strtok($rawPath, '?') ?: '', '/'));
+                $normalizedPath = preg_replace('/^api\//', '', $normalizedPath) ?? $normalizedPath;
+                $normalizedPath = preg_replace('/^tickets\/[^\/]+\/assign$/', 'tickets/{ticketId}/assign', $normalizedPath) ?? $normalizedPath;
+                $normalizedPath = preg_replace('/^tickets\/[^\/]+\/close$/', 'tickets/{ticketId}/close', $normalizedPath) ?? $normalizedPath;
+                $normalizedPath = preg_replace('/^tickets\/[^\/]+\/reply$/', 'tickets/{ticketId}/reply', $normalizedPath) ?? $normalizedPath;
+                $normalizedPath = preg_replace('/^tickets\/[^\/]+\/comments$/', 'tickets/{ticketId}/comments', $normalizedPath) ?? $normalizedPath;
+                $normalizedPath = preg_replace('/^tickets\/[^\/]+$/', 'tickets/{ticketId}', $normalizedPath) ?? $normalizedPath;
+
+                $endpointBucket = 'tickets:read';
+                $limitPerMinute = $readLimit;
+
+                if ($requestMethod === 'GET' && $normalizedPath === 'tickets') {
+                    $endpointBucket = 'tickets:index';
+                    $limitPerMinute = $indexLimit;
+                } elseif ($requestMethod === 'GET' && $normalizedPath === 'tickets/{ticketId}') {
+                    $endpointBucket = 'tickets:show';
+                    $limitPerMinute = $showLimit;
+                } elseif ($requestMethod === 'GET' && $normalizedPath === 'tickets/{ticketId}/comments') {
+                    $endpointBucket = 'tickets:comments';
+                    $limitPerMinute = $commentsLimit;
+                } elseif ($requestMethod === 'POST' && $normalizedPath === 'tickets') {
+                    $endpointBucket = 'tickets:create';
+                    $limitPerMinute = $createLimit;
+                } elseif ($requestMethod === 'PATCH' && $normalizedPath === 'tickets/{ticketId}/assign') {
+                    $endpointBucket = 'tickets:assign';
+                    $limitPerMinute = $assignLimit;
+                } elseif ($requestMethod === 'PATCH' && $normalizedPath === 'tickets/{ticketId}/close') {
+                    $endpointBucket = 'tickets:close';
+                    $limitPerMinute = $closeLimit;
+                } elseif ($requestMethod === 'POST' && $normalizedPath === 'tickets/{ticketId}/reply') {
+                    $endpointBucket = 'tickets:reply';
+                    $limitPerMinute = $replyLimit;
+                } elseif (in_array($requestMethod, ['POST', 'PATCH', 'PUT', 'DELETE'], true)) {
+                    $endpointBucket = 'tickets:write';
+                    $limitPerMinute = $writeLimit;
+                }
+
+                $ip = method_exists($request, 'ip') ? (string) $request->ip() : 'cli';
+                $key = sprintf(
+                    'ticketing:%s:%s:%s',
+                    $resolvedUserId > 0 ? (string) $resolvedUserId : 'guest',
+                    $ip,
+                    $endpointBucket
+                );
+
+                return $limitClass::perMinute($limitPerMinute)->by($key);
+            }
+        );
+    }
+
+    private function resolveRateLimit(string $envKey, int $default): int
+    {
+        $value = null;
+
+        if ($value === null || $value === false || $value === '') {
+            $value = getenv($envKey);
+        }
+
+        if (($value === null || $value === false || $value === '') && array_key_exists($envKey, $_ENV)) {
+            $value = $_ENV[$envKey];
+        }
+
+        if (!is_numeric($value)) {
+            return $default;
+        }
+
+        $resolved = (int) $value;
+
+        return $resolved > 0 ? $resolved : $default;
     }
 }

@@ -48,6 +48,7 @@ use App\Modules\Ticketing\Application\QueryHandlers\ListTicketsQueryHandler as L
 use App\Modules\Ticketing\Domain\Events\TicketClosed;
 use App\Modules\Ticketing\Domain\Events\TicketCreated;
 use App\Modules\Ticketing\Domain\Events\TicketReplied;
+use App\Modules\Ticketing\Domain\Events\TicketAssigned;
 use App\Modules\Ticketing\Infrastructure\Cache\RedisCacheStore;
 use App\Modules\Ticketing\Infrastructure\Cache\RedisTicketListCache;
 use App\Modules\Ticketing\Infrastructure\Events\LaravelEventDispatcher;
@@ -84,10 +85,11 @@ $tests = [
         $provider = new TicketingServiceProvider();
         $provider->boot();
 
-        assertSame(3, count($container->events->listeners), 'Provider deve registrar três listeners de domínio.');
+        assertSame(4, count($container->events->listeners), 'Provider deve registrar quatro listeners de domínio.');
         assertSame(TicketCreated::class, $container->events->listeners[0][0] ?? null, 'Primeiro listener deve ser de TicketCreated.');
         assertSame(TicketClosed::class, $container->events->listeners[1][0] ?? null, 'Segundo listener deve ser de TicketClosed.');
         assertSame(TicketReplied::class, $container->events->listeners[2][0] ?? null, 'Terceiro listener deve ser de TicketReplied.');
+        assertSame(TicketAssigned::class, $container->events->listeners[3][0] ?? null, 'Quarto listener deve ser de TicketAssigned.');
     },
 ];
 

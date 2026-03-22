@@ -20,12 +20,14 @@ spl_autoload_register(static function (string $class): void {
 
 use App\Modules\Ticketing\Application\DTOs\AssignTicketInputDTO;
 use App\Modules\Ticketing\Application\Ports\Out\DistributedLockPort;
+use App\Modules\Ticketing\Application\Ports\Out\EventDispatcherPort;
 use App\Modules\Ticketing\Application\Ports\Out\TicketListCachePort;
 use App\Modules\Ticketing\Application\Ports\Out\TicketRepositoryPort;
 use App\Modules\Ticketing\Application\Ports\Out\UserReadRepositoryPort;
 use App\Modules\Ticketing\Application\UseCases\AssignTicketService;
 use App\Modules\Ticketing\Domain\Entities\Ticket;
 use App\Modules\Ticketing\Domain\Enums\TicketStatus;
+use App\Modules\Ticketing\Domain\Events\TicketAssigned;
 use App\Modules\Ticketing\Domain\Exceptions\TicketNotFoundException;
 use App\Modules\Ticketing\Domain\Exceptions\TicketStateException;
 
@@ -36,8 +38,9 @@ $tests = [
         $cache = new FakeTicketListCache(null);
         $lock = new FakeLock();
         $userReadRepository = new FakeUserReadRepository(true);
+        $eventDispatcher = new FakeEventDispatcher();
 
-        $service = new AssignTicketService($ticketRepository, $cache, $lock, $userReadRepository);
+        $service = new AssignTicketService($ticketRepository, $cache, $lock, $userReadRepository, $eventDispatcher);
         $assignedTicket = $service->execute(new AssignTicketInputDTO('t-1', 88, 10));
 
         assertSame(88, $assignedTicket->assigneeId(), 'Atendente deve ser atribuído.');
@@ -47,13 +50,18 @@ $tests = [
         assertSame(5, $lock->lastSeconds, 'Lock deve usar TTL esperado.');
         assertSame(10, $userReadRepository->lastUserId, 'Autorização deve usar usuário autenticado.');
         assertSame('admin,agent', implode(',', $userReadRepository->lastRoles), 'Autorização deve validar roles permitidas.');
+        assertTrue($eventDispatcher->lastEvent instanceof TicketAssigned, 'Serviço deve disparar evento TicketAssigned.');
+        assertSame('t-1', $eventDispatcher->lastEvent->ticketId, 'Evento deve conter ticketId.');
+        assertSame(88, $eventDispatcher->lastEvent->assigneeId, 'Evento deve conter assigneeId.');
+        assertSame(10, $eventDispatcher->lastEvent->actorUserId, 'Evento deve conter actorUserId.');
     },
     'assign_ticket_not_found' => static function (): void {
         $ticketRepository = new FakeTicketRepository([]);
         $cache = new FakeTicketListCache(null);
         $lock = new FakeLock();
         $userReadRepository = new FakeUserReadRepository(true);
-        $service = new AssignTicketService($ticketRepository, $cache, $lock, $userReadRepository);
+        $eventDispatcher = new FakeEventDispatcher();
+        $service = new AssignTicketService($ticketRepository, $cache, $lock, $userReadRepository, $eventDispatcher);
 
         expectException(
             static fn (): mixed => $service->execute(new AssignTicketInputDTO('inexistente', 88, 10)),
@@ -67,7 +75,8 @@ $tests = [
         $cache = new FakeTicketListCache(null);
         $lock = new FakeLock();
         $userReadRepository = new FakeUserReadRepository(true);
-        $service = new AssignTicketService($ticketRepository, $cache, $lock, $userReadRepository);
+        $eventDispatcher = new FakeEventDispatcher();
+        $service = new AssignTicketService($ticketRepository, $cache, $lock, $userReadRepository, $eventDispatcher);
 
         expectException(
             static fn (): mixed => $service->execute(new AssignTicketInputDTO('t-2', 88, 10)),
@@ -80,7 +89,8 @@ $tests = [
         $cache = new FakeTicketListCache(null);
         $lock = new FakeLock();
         $userReadRepository = new FakeUserReadRepository(false);
-        $service = new AssignTicketService($ticketRepository, $cache, $lock, $userReadRepository);
+        $eventDispatcher = new FakeEventDispatcher();
+        $service = new AssignTicketService($ticketRepository, $cache, $lock, $userReadRepository, $eventDispatcher);
 
         expectException(
             static fn (): mixed => $service->execute(new AssignTicketInputDTO('t-3', 88, 33)),
@@ -261,6 +271,16 @@ final class FakeUserReadRepository implements UserReadRepositoryPort
         $this->lastRoles = $roles;
 
         return $this->hasRole;
+    }
+}
+
+final class FakeEventDispatcher implements EventDispatcherPort
+{
+    public ?object $lastEvent = null;
+
+    public function dispatch(object $event): void
+    {
+        $this->lastEvent = $event;
     }
 }
 

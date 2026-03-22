@@ -31,6 +31,7 @@ use App\Modules\Ticketing\Interface\Http\Requests\ShowTicketRequest;
 use App\Modules\Ticketing\Interface\Http\Requests\StoreTicketRequest;
 use App\Modules\Ticketing\Interface\Http\Resources\TicketCommentResource;
 use App\Modules\Ticketing\Interface\Http\Resources\TicketResource;
+use App\Modules\Ticketing\Infrastructure\Observability\StructuredLogger;
 use DomainException;
 use RuntimeException;
 
@@ -110,10 +111,12 @@ final class TicketController
         }
 
         $query = $this->queryParams($request);
+        $page = (int) ($query['page'] ?? 1);
+        $perPage = (int) ($query['per_page'] ?? 15);
         $tickets = $this->listTicketsQueryHandler->execute(
             new ListTicketsQuery(
-                page: (int) ($query['page'] ?? 1),
-                perPage: (int) ($query['per_page'] ?? 15),
+                page: $page,
+                perPage: $perPage,
                 status: $this->nullableString($query['status'] ?? null),
                 requesterId: $this->nullableInt($query['requester_id'] ?? null),
                 assigneeId: $this->nullableInt($query['assignee_id'] ?? null),
@@ -128,6 +131,7 @@ final class TicketController
                 fn (Ticket $ticket): array => (new TicketResource($ticket))->toArray($request),
                 $tickets
             ),
+            'meta' => $this->paginationMeta($page, $perPage, count($tickets)),
         ];
     }
 
@@ -162,6 +166,9 @@ final class TicketController
         }
 
         $payload = $this->requestPayload($request);
+        if (!$this->authorizeAbility($request, 'ticket.assign')) {
+            return $this->errorResponse('FORBIDDEN', 'Usuário sem permissão para atribuir tickets.', 403, $traceId);
+        }
 
         try {
             $ticket = $this->assignTicketCommandHandler->handle(
@@ -192,6 +199,10 @@ final class TicketController
 
         if ($authenticatedUser === null) {
             return $this->errorResponse('UNAUTHENTICATED', 'Usuário não autenticado.', 401, $traceId);
+        }
+
+        if (!$this->authorizeAbility($request, 'ticket.close')) {
+            return $this->errorResponse('FORBIDDEN', 'Usuário sem permissão para fechar tickets.', 403, $traceId);
         }
 
         try {
@@ -228,6 +239,9 @@ final class TicketController
         $authorId = $authenticatedUser['id'] > 0
             ? $authenticatedUser['id']
             : (int) ($payload['author_id'] ?? 0);
+        if (!$this->authorizeAbility($request, 'ticket.reply')) {
+            return $this->errorResponse('FORBIDDEN', 'Usuário sem permissão para responder tickets.', 403, $traceId);
+        }
 
         try {
             $comment = $this->replyTicketCommandHandler->handle(
@@ -260,13 +274,15 @@ final class TicketController
         }
 
         $query = $this->queryParams($request);
+        $page = (int) ($query['page'] ?? 1);
+        $perPage = (int) ($query['per_page'] ?? 15);
 
         try {
             $comments = $this->listTicketCommentsQueryHandler->execute(
                 new ListTicketCommentsQuery(
                     ticketId: $ticketId,
-                    page: (int) ($query['page'] ?? 1),
-                    perPage: (int) ($query['per_page'] ?? 15)
+                    page: $page,
+                    perPage: $perPage
                 )
             );
         } catch (TicketNotFoundException $exception) {
@@ -278,6 +294,7 @@ final class TicketController
                 fn (TicketComment $comment): array => (new TicketCommentResource($comment))->toArray($request),
                 $comments
             ),
+            'meta' => $this->paginationMeta($page, $perPage, count($comments)),
         ];
     }
 
@@ -349,19 +366,63 @@ final class TicketController
 
     private function logError(string $code, string $message, int $status, string $traceId): void
     {
-        error_log(
-            json_encode(
-                [
-                    'module' => 'ticketing',
-                    'type' => 'http_error',
-                    'code' => $code,
-                    'message' => $message,
-                    'status' => $status,
-                    'trace_id' => $traceId,
-                ],
-                JSON_UNESCAPED_UNICODE
-            ) ?: ''
+        StructuredLogger::log(
+            type: 'http_error',
+            payload: [
+                'code' => $code,
+                'message' => $message,
+                'status' => $status,
+                'trace_id' => $traceId,
+            ]
         );
+    }
+
+    private function authorizeAbility(object $request, string $ability): bool
+    {
+        $gateFacade = '\Illuminate\Support\Facades\Gate';
+
+        if (!class_exists($gateFacade) || !method_exists($gateFacade, 'forUser')) {
+            return true;
+        }
+
+        $user = $this->requestUserObject($request);
+
+        if ($user === null) {
+            return false;
+        }
+
+        $gate = $gateFacade::forUser($user);
+
+        if (!is_object($gate) || !method_exists($gate, 'allows')) {
+            return true;
+        }
+
+        return (bool) $gate->allows($ability);
+    }
+
+    private function requestUserObject(object $request): object|array|null
+    {
+        if (!method_exists($request, 'user')) {
+            return $GLOBALS['ticketing_authenticated_user'] ?? null;
+        }
+
+        $user = $request->user();
+
+        if (is_object($user) || is_array($user)) {
+            return $user;
+        }
+
+        return null;
+    }
+
+    private function paginationMeta(int $page, int $perPage, int $count): array
+    {
+        return [
+            'page' => max(1, $page),
+            'per_page' => max(1, $perPage),
+            'count' => max(0, $count),
+            'has_more' => $count >= max(1, $perPage),
+        ];
     }
 
     private function requestPayload(object $request): array

@@ -67,7 +67,7 @@ namespace {
             Route::$middlewares = [];
             require dirname(__DIR__, 4) . DIRECTORY_SEPARATOR . 'routes' . DIRECTORY_SEPARATOR . 'api.php';
 
-            assertSame(['auth:sanctum'], Route::$middlewares, 'Middleware de autenticação deve ser aplicado.');
+            assertSame(['auth:sanctum', 'throttle:ticketing'], Route::$middlewares, 'Middlewares de autenticação e throttle devem ser aplicados.');
             assertSame(7, count(Route::$routes), 'Deve registrar os sete endpoints principais de ticket.');
             assertSame(['GET', '/tickets'], [Route::$routes[0][0], Route::$routes[0][1]], 'Primeira rota deve listar tickets.');
             assertSame(['GET', '/tickets/{ticketId}'], [Route::$routes[1][0], Route::$routes[1][1]], 'Segunda rota deve detalhar ticket.');

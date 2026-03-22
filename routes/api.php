@@ -8,7 +8,7 @@ use App\Modules\Ticketing\Interface\Http\Controllers\TicketController;
 $routeFacade = '\Illuminate\Support\Facades\Route';
 
 if (class_exists($routeFacade)) {
-    $routeFacade::middleware(['auth:sanctum'])->group(function () use ($routeFacade): void {
+    $routeFacade::middleware(['auth:sanctum', 'throttle:ticketing'])->group(function () use ($routeFacade): void {
         $routeFacade::get('/tickets', [TicketController::class, 'index']);
         $routeFacade::get('/tickets/{ticketId}', [TicketController::class, 'show']);
         $routeFacade::get('/tickets/{ticketId}/comments', [TicketController::class, 'comments']);
