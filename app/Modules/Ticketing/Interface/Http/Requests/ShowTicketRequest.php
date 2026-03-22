@@ -7,7 +7,7 @@ namespace App\Modules\Ticketing\Interface\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
 
-final class ListTicketsRequest extends FormRequest
+final class ShowTicketRequest extends FormRequest
 {
     public function authorize(): bool
     {
@@ -16,9 +16,6 @@ final class ListTicketsRequest extends FormRequest
 
     public function rules(): array
     {
-        return [
-            'page' => ['sometimes', 'integer', 'min:1'],
-            'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
-        ];
+        return [];
     }
 }

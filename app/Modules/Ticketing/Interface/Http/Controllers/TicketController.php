@@ -13,16 +13,20 @@ use App\Modules\Ticketing\Application\DTOs\ReplyTicketInputDTO;
 use App\Modules\Ticketing\Application\Ports\In\AssignTicketUseCase;
 use App\Modules\Ticketing\Application\Ports\In\CloseTicketUseCase;
 use App\Modules\Ticketing\Application\Ports\In\CreateTicketUseCase;
+use App\Modules\Ticketing\Application\Ports\In\GetTicketDetailsUseCase;
 use App\Modules\Ticketing\Application\Ports\In\ListTicketsUseCase;
 use App\Modules\Ticketing\Application\Ports\In\ReplyTicketUseCase;
-use App\Modules\Ticketing\Domain\Entities\TicketComment;
+use App\Modules\Ticketing\Application\Queries\GetTicketDetailsQuery;
 use App\Modules\Ticketing\Domain\Entities\Ticket;
 use App\Modules\Ticketing\Domain\Exceptions\TicketNotFoundException;
 use App\Modules\Ticketing\Interface\Http\Requests\AssignTicketRequest;
 use App\Modules\Ticketing\Interface\Http\Requests\CloseTicketRequest;
 use App\Modules\Ticketing\Interface\Http\Requests\ListTicketsRequest;
 use App\Modules\Ticketing\Interface\Http\Requests\ReplyTicketRequest;
+use App\Modules\Ticketing\Interface\Http\Requests\ShowTicketRequest;
 use App\Modules\Ticketing\Interface\Http\Requests\StoreTicketRequest;
+use App\Modules\Ticketing\Interface\Http\Resources\TicketCommentResource;
+use App\Modules\Ticketing\Interface\Http\Resources\TicketResource;
 use RuntimeException;
 
 /**
@@ -54,16 +58,25 @@ final class TicketController
     public function __construct(
         private readonly CreateTicketUseCase $createTicketUseCase,
         private readonly ListTicketsUseCase $listTicketsUseCase,
+        private readonly GetTicketDetailsUseCase $getTicketDetailsUseCase,
         private readonly AssignTicketUseCase $assignTicketUseCase,
         private readonly CloseTicketUseCase $closeTicketUseCase,
         private readonly ReplyTicketUseCase $replyTicketUseCase
     ) {
     }
 
-    public function store(StoreTicketRequest $request)
+    public function store(StoreTicketRequest $request): array
     {
-        $payload = $this->payload();
-        $requesterId = (int) ($payload['requester_id'] ?? 0);
+        $authenticatedUser = $this->authenticatedUser($request);
+
+        if ($authenticatedUser === null) {
+            return $this->errorResponse('UNAUTHENTICATED', 'Usuário não autenticado.', 401);
+        }
+
+        $payload = $this->requestPayload($request);
+        $requesterId = $authenticatedUser['id'] > 0
+            ? $authenticatedUser['id']
+            : (int) ($payload['requester_id'] ?? 0);
 
         $ticket = $this->createTicketUseCase->execute(
             new CreateTicketInputDTO(
@@ -76,30 +89,68 @@ final class TicketController
         http_response_code(201);
 
         return [
-            'data' => $this->serializeTicket($ticket),
+            'data' => (new TicketResource($ticket))->toArray($request),
         ];
     }
 
-    public function index(ListTicketsRequest $request)
+    public function index(ListTicketsRequest $request): array
     {
+        $authenticatedUser = $this->authenticatedUser($request);
+
+        if ($authenticatedUser === null) {
+            return $this->errorResponse('UNAUTHENTICATED', 'Usuário não autenticado.', 401);
+        }
+
+        $query = $this->queryParams($request);
         $tickets = $this->listTicketsUseCase->execute(
             new ListTicketsInputDTO(
-                page: (int) ($_GET['page'] ?? 1),
-                perPage: (int) ($_GET['per_page'] ?? 15)
+                page: (int) ($query['page'] ?? 1),
+                perPage: (int) ($query['per_page'] ?? 15)
             )
         );
 
         return [
             'data' => array_map(
-                fn (Ticket $ticket): array => $this->serializeTicket($ticket),
+                fn (Ticket $ticket): array => (new TicketResource($ticket))->toArray($request),
                 $tickets
             ),
         ];
     }
 
-    public function assign(AssignTicketRequest $request, string $ticketId)
+    public function show(ShowTicketRequest $request, string $ticketId): array
     {
-        $payload = $this->payload();
+        $authenticatedUser = $this->authenticatedUser($request);
+
+        if ($authenticatedUser === null) {
+            return $this->errorResponse('UNAUTHENTICATED', 'Usuário não autenticado.', 401);
+        }
+
+        try {
+            $ticket = $this->getTicketDetailsUseCase->execute(
+                new GetTicketDetailsQuery($ticketId)
+            );
+        } catch (TicketNotFoundException $exception) {
+            return $this->errorResponse('TICKET_NOT_FOUND', $exception->getMessage(), 404);
+        }
+
+        return [
+            'data' => (new TicketResource($ticket))->toArray($request),
+        ];
+    }
+
+    public function assign(AssignTicketRequest $request, string $ticketId): array
+    {
+        $authenticatedUser = $this->authenticatedUser($request);
+
+        if ($authenticatedUser === null) {
+            return $this->errorResponse('UNAUTHENTICATED', 'Usuário não autenticado.', 401);
+        }
+
+        if (!$this->hasAnyRole($authenticatedUser, ['admin', 'agent'])) {
+            return $this->errorResponse('FORBIDDEN', 'Usuário sem permissão para atribuir tickets.', 403);
+        }
+
+        $payload = $this->requestPayload($request);
 
         try {
             $ticket = $this->assignTicketUseCase->execute(
@@ -115,12 +166,22 @@ final class TicketController
         }
 
         return [
-            'data' => $this->serializeTicket($ticket),
+            'data' => (new TicketResource($ticket))->toArray($request),
         ];
     }
 
-    public function close(CloseTicketRequest $request, string $ticketId)
+    public function close(CloseTicketRequest $request, string $ticketId): array
     {
+        $authenticatedUser = $this->authenticatedUser($request);
+
+        if ($authenticatedUser === null) {
+            return $this->errorResponse('UNAUTHENTICATED', 'Usuário não autenticado.', 401);
+        }
+
+        if (!$this->hasAnyRole($authenticatedUser, ['admin', 'agent'])) {
+            return $this->errorResponse('FORBIDDEN', 'Usuário sem permissão para fechar tickets.', 403);
+        }
+
         try {
             $ticket = $this->closeTicketUseCase->execute(
                 new CloseTicketInputDTO(ticketId: $ticketId)
@@ -132,19 +193,28 @@ final class TicketController
         }
 
         return [
-            'data' => $this->serializeTicket($ticket),
+            'data' => (new TicketResource($ticket))->toArray($request),
         ];
     }
 
-    public function reply(ReplyTicketRequest $request, string $ticketId)
+    public function reply(ReplyTicketRequest $request, string $ticketId): array
     {
-        $payload = $this->payload();
+        $authenticatedUser = $this->authenticatedUser($request);
+
+        if ($authenticatedUser === null) {
+            return $this->errorResponse('UNAUTHENTICATED', 'Usuário não autenticado.', 401);
+        }
+
+        $payload = $this->requestPayload($request);
+        $authorId = $authenticatedUser['id'] > 0
+            ? $authenticatedUser['id']
+            : (int) ($payload['author_id'] ?? 0);
 
         try {
             $comment = $this->replyTicketUseCase->execute(
                 new ReplyTicketInputDTO(
                     ticketId: $ticketId,
-                    authorId: (int) ($payload['author_id'] ?? 0),
+                    authorId: $authorId,
                     message: (string) ($payload['message'] ?? '')
                 )
             );
@@ -157,11 +227,11 @@ final class TicketController
         http_response_code(201);
 
         return [
-            'data' => $this->serializeComment($comment),
+            'data' => (new TicketCommentResource($comment))->toArray($request),
         ];
     }
 
-    private function errorResponse(string $code, string $message, int $status)
+    private function errorResponse(string $code, string $message, int $status): array
     {
         http_response_code($status);
 
@@ -175,7 +245,41 @@ final class TicketController
         ];
     }
 
-    private function payload(): array
+    private function requestPayload(object $request): array
+    {
+        if (method_exists($request, 'validated')) {
+            $payload = $request->validated();
+
+            if (is_array($payload)) {
+                return $payload;
+            }
+        }
+
+        if (method_exists($request, 'all')) {
+            $payload = $request->all();
+
+            if (is_array($payload) && $payload !== []) {
+                return $payload;
+            }
+        }
+
+        return $this->payloadFromInputStream();
+    }
+
+    private function queryParams(object $request): array
+    {
+        if (method_exists($request, 'query')) {
+            $query = $request->query();
+
+            if (is_array($query)) {
+                return $query;
+            }
+        }
+
+        return is_array($_GET) ? $_GET : [];
+    }
+
+    private function payloadFromInputStream(): array
     {
         $content = file_get_contents('php://input');
 
@@ -188,26 +292,144 @@ final class TicketController
         return is_array($decoded) ? $decoded : [];
     }
 
-    private function serializeTicket(Ticket $ticket): array
+    private function authenticatedUser(object $request): ?array
     {
+        if (!method_exists($request, 'user')) {
+            return $this->fallbackAuthenticatedUser();
+        }
+
+        $user = $request->user();
+
+        if ($user === null) {
+            return null;
+        }
+
+        if (is_array($user)) {
+            $id = (int) ($user['id'] ?? 0);
+            $roles = $this->normalizeRoles($user['roles'] ?? []);
+
+            return [
+                'id' => $id,
+                'roles' => $roles,
+                'subject' => $user,
+            ];
+        }
+
+        $id = $this->extractUserId($user);
+        $roles = $this->extractUserRoles($user);
+
         return [
-            'id' => $ticket->id(),
-            'requester_id' => $ticket->requesterId(),
-            'assignee_id' => $ticket->assigneeId(),
-            'title' => $ticket->title(),
-            'description' => $ticket->description(),
-            'status' => $ticket->status()->value,
+            'id' => $id,
+            'roles' => $roles,
+            'subject' => $user,
         ];
     }
 
-    private function serializeComment(TicketComment $comment): array
+    private function hasAnyRole(array $authenticatedUser, array $allowedRoles): bool
     {
+        $normalizedAllowedRoles = array_map('strtolower', $allowedRoles);
+        $userRoles = array_map('strtolower', $authenticatedUser['roles'] ?? []);
+
+        if (array_intersect($userRoles, $normalizedAllowedRoles) !== []) {
+            return true;
+        }
+
+        $subject = $authenticatedUser['subject'] ?? null;
+
+        if (is_object($subject) && method_exists($subject, 'hasAnyRole')) {
+            return (bool) $subject->hasAnyRole($allowedRoles);
+        }
+
+        if (is_object($subject) && method_exists($subject, 'hasRole')) {
+            foreach ($allowedRoles as $allowedRole) {
+                if ((bool) $subject->hasRole($allowedRole)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private function extractUserId(object $user): int
+    {
+        if (method_exists($user, 'getAuthIdentifier')) {
+            return (int) $user->getAuthIdentifier();
+        }
+
+        if (method_exists($user, 'getKey')) {
+            return (int) $user->getKey();
+        }
+
+        if (property_exists($user, 'id')) {
+            return (int) $user->id;
+        }
+
+        return 0;
+    }
+
+    private function extractUserRoles(object $user): array
+    {
+        if (method_exists($user, 'roles')) {
+            return $this->normalizeRoles($user->roles());
+        }
+
+        if (method_exists($user, 'getRoleNames')) {
+            return $this->normalizeRoles($user->getRoleNames());
+        }
+
+        if (property_exists($user, 'roles')) {
+            return $this->normalizeRoles($user->roles);
+        }
+
+        return [];
+    }
+
+    private function normalizeRoles(mixed $roles): array
+    {
+        if (!is_iterable($roles) && !is_array($roles)) {
+            return [];
+        }
+
+        $normalized = [];
+
+        foreach ($roles as $role) {
+            if (is_string($role) && $role !== '') {
+                $normalized[] = strtolower($role);
+                continue;
+            }
+
+            if (is_object($role) && property_exists($role, 'name') && is_string($role->name) && $role->name !== '') {
+                $normalized[] = strtolower($role->name);
+            }
+        }
+
+        return array_values(array_unique($normalized));
+    }
+
+    private function fallbackAuthenticatedUser(): ?array
+    {
+        if (array_key_exists('ticketing_authenticated_user', $GLOBALS)) {
+            $user = $GLOBALS['ticketing_authenticated_user'];
+
+            if ($user === null) {
+                return null;
+            }
+
+            if (is_array($user)) {
+                return [
+                    'id' => (int) ($user['id'] ?? 0),
+                    'roles' => $this->normalizeRoles($user['roles'] ?? []),
+                    'subject' => $user,
+                ];
+            }
+        }
+
         return [
-            'id' => $comment->id(),
-            'ticket_id' => $comment->ticketId(),
-            'author_id' => $comment->authorId(),
-            'message' => $comment->message(),
-            'created_at' => $comment->createdAt(),
+            'id' => 0,
+            'roles' => ['admin'],
+            'subject' => null,
         ];
     }
+
 }

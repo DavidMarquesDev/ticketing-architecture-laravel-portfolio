@@ -5,7 +5,9 @@ declare(strict_types=1);
 
 namespace App\Modules\Ticketing\Interface\Http\Requests;
 
-final class CloseTicketRequest
+use Illuminate\Foundation\Http\FormRequest;
+
+final class CloseTicketRequest extends FormRequest
 {
     public function authorize(): bool
     {

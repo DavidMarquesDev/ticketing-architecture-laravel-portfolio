@@ -11,8 +11,10 @@ use App\Modules\Ticketing\Application\Listeners\HandleTicketReplied;
 use App\Modules\Ticketing\Application\Ports\In\AssignTicketUseCase;
 use App\Modules\Ticketing\Application\Ports\In\CloseTicketUseCase;
 use App\Modules\Ticketing\Application\Ports\In\CreateTicketUseCase;
+use App\Modules\Ticketing\Application\Ports\In\GetTicketDetailsUseCase;
 use App\Modules\Ticketing\Application\Ports\In\ListTicketsUseCase;
 use App\Modules\Ticketing\Application\Ports\In\ReplyTicketUseCase;
+use App\Modules\Ticketing\Application\QueryHandlers\GetTicketDetailsQueryHandler;
 use App\Modules\Ticketing\Application\Ports\Out\DistributedLockPort;
 use App\Modules\Ticketing\Application\Ports\Out\EventDispatcherPort;
 use App\Modules\Ticketing\Application\Ports\Out\QueueDispatcherPort;
@@ -61,6 +63,7 @@ final class TicketingServiceProvider
             $container->bind(QueueDispatcherPort::class, RedisQueueDispatcher::class);
             $container->bind(CreateTicketUseCase::class, CreateTicketService::class);
             $container->bind(ListTicketsUseCase::class, ListTicketsService::class);
+            $container->bind(GetTicketDetailsUseCase::class, GetTicketDetailsQueryHandler::class);
             $container->bind(AssignTicketUseCase::class, AssignTicketService::class);
             $container->bind(CloseTicketUseCase::class, CloseTicketService::class);
             $container->bind(ReplyTicketUseCase::class, ReplyTicketService::class);
