@@ -17,13 +17,16 @@ use App\Modules\Ticketing\Application\Ports\In\ListTicketsUseCase;
 use App\Modules\Ticketing\Application\Ports\In\ReplyTicketUseCase;
 use App\Modules\Ticketing\Application\QueryHandlers\GetTicketDetailsQueryHandler;
 use App\Modules\Ticketing\Application\QueryHandlers\ListTicketCommentsQueryHandler;
+use App\Modules\Ticketing\Application\Ports\Out\CachePort;
 use App\Modules\Ticketing\Application\Ports\Out\DistributedLockPort;
+use App\Modules\Ticketing\Application\Ports\Out\EventBusPort;
 use App\Modules\Ticketing\Application\Ports\Out\EventDispatcherPort;
 use App\Modules\Ticketing\Application\Ports\Out\IntegrationEventPublisherPort;
 use App\Modules\Ticketing\Application\Ports\Out\QueueDispatcherPort;
 use App\Modules\Ticketing\Application\Ports\Out\TicketCommentRepositoryPort;
 use App\Modules\Ticketing\Application\Ports\Out\TicketListCachePort;
 use App\Modules\Ticketing\Application\Ports\Out\TicketRepositoryPort;
+use App\Modules\Ticketing\Application\Ports\Out\UserReadRepositoryPort;
 use App\Modules\Ticketing\Application\UseCases\AssignTicketService;
 use App\Modules\Ticketing\Application\UseCases\CloseTicketService;
 use App\Modules\Ticketing\Application\UseCases\CreateTicketService;
@@ -32,13 +35,17 @@ use App\Modules\Ticketing\Application\UseCases\ReplyTicketService;
 use App\Modules\Ticketing\Domain\Events\TicketClosed;
 use App\Modules\Ticketing\Domain\Events\TicketCreated;
 use App\Modules\Ticketing\Domain\Events\TicketReplied;
+use App\Modules\Ticketing\Infrastructure\Cache\RedisCacheStore;
 use App\Modules\Ticketing\Infrastructure\Cache\RedisTicketListCache;
 use App\Modules\Ticketing\Infrastructure\Events\LaravelEventDispatcher;
 use App\Modules\Ticketing\Infrastructure\Lock\RedisDistributedLock;
+use App\Modules\Ticketing\Infrastructure\Persistence\Repositories\AuthenticatedUserReadRepository;
+use App\Modules\Ticketing\Infrastructure\Persistence\Repositories\EloquentTicketCommentRepository;
+use App\Modules\Ticketing\Infrastructure\Persistence\Repositories\EloquentTicketRepository;
 use App\Modules\Ticketing\Infrastructure\Persistence\Repositories\InMemoryTicketCommentRepository;
 use App\Modules\Ticketing\Infrastructure\Persistence\Repositories\InMemoryTicketRepository;
-use App\Modules\Ticketing\Infrastructure\Queue\RedisQueueDispatcher;
 use App\Modules\Ticketing\Infrastructure\Queue\QueueIntegrationEventPublisher;
+use App\Modules\Ticketing\Infrastructure\Queue\RedisQueueDispatcher;
 
 /**
  * Provider para bindings iniciais do módulo Ticketing.
@@ -56,14 +63,23 @@ final class TicketingServiceProvider
         }
 
         if (method_exists($container, 'singleton')) {
-            $container->singleton(TicketRepositoryPort::class, InMemoryTicketRepository::class);
-            $container->singleton(TicketCommentRepositoryPort::class, InMemoryTicketCommentRepository::class);
+            $container->singleton(
+                TicketRepositoryPort::class,
+                $this->supportsEloquent() ? EloquentTicketRepository::class : InMemoryTicketRepository::class
+            );
+            $container->singleton(
+                TicketCommentRepositoryPort::class,
+                $this->supportsEloquent() ? EloquentTicketCommentRepository::class : InMemoryTicketCommentRepository::class
+            );
+            $container->singleton(UserReadRepositoryPort::class, AuthenticatedUserReadRepository::class);
         }
 
         if (method_exists($container, 'bind')) {
             $container->bind(TicketListCachePort::class, RedisTicketListCache::class);
+            $container->bind(CachePort::class, RedisCacheStore::class);
             $container->bind(DistributedLockPort::class, RedisDistributedLock::class);
             $container->bind(EventDispatcherPort::class, LaravelEventDispatcher::class);
+            $container->bind(EventBusPort::class, LaravelEventDispatcher::class);
             $container->bind(QueueDispatcherPort::class, RedisQueueDispatcher::class);
             $container->bind(IntegrationEventPublisherPort::class, QueueIntegrationEventPublisher::class);
             $container->bind(CreateTicketUseCase::class, CreateTicketService::class);
@@ -102,5 +118,10 @@ final class TicketingServiceProvider
         $container = call_user_func('app');
 
         return is_object($container) ? $container : null;
+    }
+
+    private function supportsEloquent(): bool
+    {
+        return class_exists('Illuminate\Database\Eloquent\Model');
     }
 }

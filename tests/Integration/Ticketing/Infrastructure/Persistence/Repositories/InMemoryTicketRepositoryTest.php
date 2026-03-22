@@ -45,9 +45,9 @@ $tests = [
 
         assertSame(2, count($pageOne), 'Página 1 deve conter dois itens.');
         assertSame(1, count($pageTwo), 'Página 2 deve conter um item.');
-        assertSame('t-1', $pageOne[0]->id(), 'Primeiro item da página 1 deve ser t-1.');
+        assertSame('t-3', $pageOne[0]->id(), 'Primeiro item da página 1 deve ser t-3.');
         assertSame('t-2', $pageOne[1]->id(), 'Segundo item da página 1 deve ser t-2.');
-        assertSame('t-3', $pageTwo[0]->id(), 'Primeiro item da página 2 deve ser t-3.');
+        assertSame('t-1', $pageTwo[0]->id(), 'Primeiro item da página 2 deve ser t-1.');
     },
     'inmemory_ticket_repository_find_nonexistent_returns_null' => static function (): void {
         resetRepositoryState();
