@@ -30,6 +30,8 @@ use App\Modules\Ticketing\Application\Ports\Out\EventBusPort;
 use App\Modules\Ticketing\Application\Ports\Out\EventDispatcherPort;
 use App\Modules\Ticketing\Application\Ports\Out\TicketListCachePort;
 use App\Modules\Ticketing\Application\Ports\Out\UserReadRepositoryPort;
+use App\Modules\Ticketing\Application\Ports\In\AssignTicketCommandHandler;
+use App\Modules\Ticketing\Application\CommandHandlers\AssignTicketCommandHandler as AssignTicketCommandHandlerService;
 use App\Modules\Ticketing\Domain\Events\TicketClosed;
 use App\Modules\Ticketing\Domain\Events\TicketCreated;
 use App\Modules\Ticketing\Domain\Events\TicketReplied;
@@ -52,6 +54,7 @@ $tests = [
         assertSame(LaravelEventDispatcher::class, $container->bindings[EventDispatcherPort::class] ?? null, 'Provider deve manter binding EventDispatcherPort.');
         assertSame(RedisTicketListCache::class, $container->bindings[TicketListCachePort::class] ?? null, 'Provider deve manter binding TicketListCachePort.');
         assertSame(AuthenticatedUserReadRepository::class, $container->singletons[UserReadRepositoryPort::class] ?? null, 'Provider deve registrar UserReadRepositoryPort.');
+        assertSame(AssignTicketCommandHandlerService::class, $container->bindings[AssignTicketCommandHandler::class] ?? null, 'Provider deve bindar AssignTicketCommandHandler.');
     },
     'ticketing_service_provider_boot_registers_domain_event_listeners' => static function (): void {
         $container = new FakeContainer();

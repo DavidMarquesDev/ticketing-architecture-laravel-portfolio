@@ -8,6 +8,7 @@ namespace App\Providers;
 use App\Modules\Ticketing\Application\Listeners\HandleTicketCreated;
 use App\Modules\Ticketing\Application\Listeners\HandleTicketClosed;
 use App\Modules\Ticketing\Application\Listeners\HandleTicketReplied;
+use App\Modules\Ticketing\Application\Ports\In\AssignTicketCommandHandler;
 use App\Modules\Ticketing\Application\Ports\In\AssignTicketUseCase;
 use App\Modules\Ticketing\Application\Ports\In\CloseTicketUseCase;
 use App\Modules\Ticketing\Application\Ports\In\CreateTicketUseCase;
@@ -27,6 +28,7 @@ use App\Modules\Ticketing\Application\Ports\Out\TicketCommentRepositoryPort;
 use App\Modules\Ticketing\Application\Ports\Out\TicketListCachePort;
 use App\Modules\Ticketing\Application\Ports\Out\TicketRepositoryPort;
 use App\Modules\Ticketing\Application\Ports\Out\UserReadRepositoryPort;
+use App\Modules\Ticketing\Application\CommandHandlers\AssignTicketCommandHandler as AssignTicketCommandHandlerService;
 use App\Modules\Ticketing\Application\UseCases\AssignTicketService;
 use App\Modules\Ticketing\Application\UseCases\CloseTicketService;
 use App\Modules\Ticketing\Application\UseCases\CreateTicketService;
@@ -87,6 +89,7 @@ final class TicketingServiceProvider
             $container->bind(GetTicketDetailsUseCase::class, GetTicketDetailsQueryHandler::class);
             $container->bind(ListTicketCommentsUseCase::class, ListTicketCommentsQueryHandler::class);
             $container->bind(AssignTicketUseCase::class, AssignTicketService::class);
+            $container->bind(AssignTicketCommandHandler::class, AssignTicketCommandHandlerService::class);
             $container->bind(CloseTicketUseCase::class, CloseTicketService::class);
             $container->bind(ReplyTicketUseCase::class, ReplyTicketService::class);
         }

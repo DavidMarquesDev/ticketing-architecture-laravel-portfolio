@@ -56,12 +56,12 @@ namespace {
         }
     });
 
-    use App\Modules\Ticketing\Application\DTOs\AssignTicketInputDTO;
+    use App\Modules\Ticketing\Application\Commands\AssignTicketCommand;
     use App\Modules\Ticketing\Application\DTOs\CloseTicketInputDTO;
     use App\Modules\Ticketing\Application\DTOs\CreateTicketInputDTO;
     use App\Modules\Ticketing\Application\DTOs\ListTicketsInputDTO;
     use App\Modules\Ticketing\Application\DTOs\ReplyTicketInputDTO;
-    use App\Modules\Ticketing\Application\Ports\In\AssignTicketUseCase;
+    use App\Modules\Ticketing\Application\Ports\In\AssignTicketCommandHandler;
     use App\Modules\Ticketing\Application\Ports\In\CloseTicketUseCase;
     use App\Modules\Ticketing\Application\Ports\In\CreateTicketUseCase;
     use App\Modules\Ticketing\Application\Ports\In\GetTicketDetailsUseCase;
@@ -291,10 +291,10 @@ namespace {
                 noopListUseCase(),
                 noopGetTicketDetailsUseCase(),
                 noopListTicketCommentsUseCase(),
-                new class implements AssignTicketUseCase {
-                    public function execute(AssignTicketInputDTO $input): Ticket
+                new class implements AssignTicketCommandHandler {
+                    public function handle(AssignTicketCommand $command): Ticket
                     {
-                        $GLOBALS['captured_assign_input'] = $input;
+                        $GLOBALS['captured_assign_command'] = $command;
 
                         throw new TicketNotFoundException('Ticket não encontrado.');
                     }
@@ -304,26 +304,26 @@ namespace {
             );
 
             $response = $controller->assign(new AssignTicketRequest(), 'ticket-inexistente');
-            $input = $GLOBALS['captured_assign_input'];
+            $input = $GLOBALS['captured_assign_command'];
 
             assertSame(404, (int) ($GLOBALS['ticketing_http_status_code'] ?? 200), 'Assign deve mapear TicketNotFoundException para 404.');
             assertSame('TICKET_NOT_FOUND', $response['error']['code'], 'Payload de erro deve usar código padronizado.');
-            assertSame(99, $input->actorUserId, 'Assign deve enviar usuário autenticado no DTO de atribuição.');
+            assertSame(99, $input->actorUserId, 'Assign deve enviar usuário autenticado no Command de atribuição.');
         },
         'ticket_controller_assign_returns_403_when_user_has_no_permission' => static function (): void {
             resetHttpContext();
             $GLOBALS['ticketing_authenticated_user'] = ['id' => 33, 'roles' => ['customer']];
-            $GLOBALS['assign_use_case_called'] = false;
+            $GLOBALS['assign_handler_called'] = false;
 
             $controller = new TicketController(
                 noopCreateUseCase(),
                 noopListUseCase(),
                 noopGetTicketDetailsUseCase(),
                 noopListTicketCommentsUseCase(),
-                new class implements AssignTicketUseCase {
-                    public function execute(AssignTicketInputDTO $input): Ticket
+                new class implements AssignTicketCommandHandler {
+                    public function handle(AssignTicketCommand $command): Ticket
                     {
-                        $GLOBALS['assign_use_case_called'] = true;
+                        $GLOBALS['assign_handler_called'] = true;
 
                         throw new \DomainException('Usuário sem permissão para atribuir tickets.');
                     }
@@ -338,7 +338,7 @@ namespace {
 
             assertSame(403, (int) ($GLOBALS['ticketing_http_status_code'] ?? 200), 'Assign deve responder 403 sem permissão.');
             assertSame('FORBIDDEN', $response['error']['code'], 'Assign deve retornar código FORBIDDEN.');
-            assertSame(true, $GLOBALS['assign_use_case_called'], 'Assign deve mapear retorno de autorização do caso de uso.');
+            assertSame(true, $GLOBALS['assign_handler_called'], 'Assign deve mapear retorno de autorização do command handler.');
         },
         'ticket_controller_close_maps_conflict_to_409' => static function (): void {
             resetHttpContext();
@@ -514,10 +514,10 @@ namespace {
         };
     }
 
-    function noopAssignUseCase(): AssignTicketUseCase
+    function noopAssignUseCase(): AssignTicketCommandHandler
     {
-        return new class implements AssignTicketUseCase {
-            public function execute(AssignTicketInputDTO $input): Ticket
+        return new class implements AssignTicketCommandHandler {
+            public function handle(AssignTicketCommand $command): Ticket
             {
                 return Ticket::open('noop-assign', 1, 'noop', 'noop');
             }

@@ -5,12 +5,12 @@ declare(strict_types=1);
 
 namespace App\Modules\Ticketing\Interface\Http\Controllers;
 
-use App\Modules\Ticketing\Application\DTOs\AssignTicketInputDTO;
+use App\Modules\Ticketing\Application\Commands\AssignTicketCommand;
 use App\Modules\Ticketing\Application\DTOs\CloseTicketInputDTO;
 use App\Modules\Ticketing\Application\DTOs\CreateTicketInputDTO;
 use App\Modules\Ticketing\Application\DTOs\ListTicketsInputDTO;
 use App\Modules\Ticketing\Application\DTOs\ReplyTicketInputDTO;
-use App\Modules\Ticketing\Application\Ports\In\AssignTicketUseCase;
+use App\Modules\Ticketing\Application\Ports\In\AssignTicketCommandHandler;
 use App\Modules\Ticketing\Application\Ports\In\CloseTicketUseCase;
 use App\Modules\Ticketing\Application\Ports\In\CreateTicketUseCase;
 use App\Modules\Ticketing\Application\Ports\In\GetTicketDetailsUseCase;
@@ -65,7 +65,7 @@ final class TicketController
         private readonly ListTicketsUseCase $listTicketsUseCase,
         private readonly GetTicketDetailsUseCase $getTicketDetailsUseCase,
         private readonly ListTicketCommentsUseCase $listTicketCommentsUseCase,
-        private readonly AssignTicketUseCase $assignTicketUseCase,
+        private readonly AssignTicketCommandHandler $assignTicketCommandHandler,
         private readonly CloseTicketUseCase $closeTicketUseCase,
         private readonly ReplyTicketUseCase $replyTicketUseCase
     ) {
@@ -161,8 +161,8 @@ final class TicketController
         $payload = $this->requestPayload($request);
 
         try {
-            $ticket = $this->assignTicketUseCase->execute(
-                new AssignTicketInputDTO(
+            $ticket = $this->assignTicketCommandHandler->handle(
+                new AssignTicketCommand(
                     ticketId: $ticketId,
                     assigneeId: (int) ($payload['assignee_id'] ?? 0),
                     actorUserId: (int) ($authenticatedUser['id'] ?? 0)
