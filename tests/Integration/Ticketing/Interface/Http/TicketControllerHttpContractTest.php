@@ -115,6 +115,7 @@ namespace {
             assertSame(10, $command->requesterId, 'Command de criação deve mapear requester_id.');
             assertSame('Falha no checkout', $command->title, 'Command de criação deve mapear title.');
             assertSame('Erro 500 ao finalizar pagamento', $command->description, 'Command de criação deve mapear description.');
+            assertSame(16, strlen((string) $command->traceId), 'Store deve propagar trace_id no command de criação.');
             assertSame('t-http-1', $response['data']['id'], 'Response deve retornar id do ticket.');
             assertSame('open', $response['data']['status'], 'Response deve retornar status do ticket.');
         },
@@ -309,6 +310,7 @@ namespace {
             assertSame(404, (int) ($GLOBALS['ticketing_http_status_code'] ?? 200), 'Assign deve mapear TicketNotFoundException para 404.');
             assertSame('TICKET_NOT_FOUND', $response['error']['code'], 'Payload de erro deve usar código padronizado.');
             assertSame(99, $input->actorUserId, 'Assign deve enviar usuário autenticado no Command de atribuição.');
+            assertSame($input->traceId, $response['error']['trace_id'], 'Assign deve reutilizar trace_id no erro.');
         },
         'ticket_controller_assign_returns_403_when_user_has_no_permission' => static function (): void {
             resetHttpContext();
@@ -367,6 +369,7 @@ namespace {
             assertSame(409, (int) ($GLOBALS['ticketing_http_status_code'] ?? 200), 'Close deve mapear conflito para 409.');
             assertSame('TICKET_CONFLICT', $response['error']['code'], 'Payload de erro deve usar TICKET_CONFLICT.');
             assertSame(44, $input->actorUserId, 'Close deve enviar usuário autenticado no Command de fechamento.');
+            assertSame($input->traceId, $response['error']['trace_id'], 'Close deve reutilizar trace_id no erro.');
         },
         'ticket_controller_close_returns_403_when_user_has_no_permission' => static function (): void {
             resetHttpContext();
@@ -426,6 +429,7 @@ namespace {
             assertSame(201, (int) ($GLOBALS['ticketing_http_status_code'] ?? 200), 'Reply deve responder HTTP 201.');
             assertSame('t-http-1', $command->ticketId, 'Command de reply deve mapear ticketId.');
             assertSame(99, $command->authorId, 'Command de reply deve mapear author_id.');
+            assertSame(16, strlen((string) $command->traceId), 'Reply deve propagar trace_id no command.');
             assertSame('Aplicada correção.', $response['data']['message'], 'Response deve serializar mensagem.');
             assertSame('c-http-1', $response['data']['id'], 'Response deve serializar id do comentário.');
         },

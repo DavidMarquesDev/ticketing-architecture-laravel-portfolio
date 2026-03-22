@@ -74,9 +74,10 @@ final class TicketController
     public function store(StoreTicketRequest $request): array
     {
         $authenticatedUser = $this->authenticatedUser($request);
+        $traceId = $this->generateTraceId();
 
         if ($authenticatedUser === null) {
-            return $this->errorResponse('UNAUTHENTICATED', 'Usuário não autenticado.', 401);
+            return $this->errorResponse('UNAUTHENTICATED', 'Usuário não autenticado.', 401, $traceId);
         }
 
         $payload = $this->requestPayload($request);
@@ -88,7 +89,8 @@ final class TicketController
             new CreateTicketCommand(
                 requesterId: $requesterId,
                 title: (string) ($payload['title'] ?? ''),
-                description: (string) ($payload['description'] ?? '')
+                description: (string) ($payload['description'] ?? ''),
+                traceId: $traceId
             )
         );
 
@@ -153,9 +155,10 @@ final class TicketController
     public function assign(AssignTicketRequest $request, string $ticketId): array
     {
         $authenticatedUser = $this->authenticatedUser($request);
+        $traceId = $this->generateTraceId();
 
         if ($authenticatedUser === null) {
-            return $this->errorResponse('UNAUTHENTICATED', 'Usuário não autenticado.', 401);
+            return $this->errorResponse('UNAUTHENTICATED', 'Usuário não autenticado.', 401, $traceId);
         }
 
         $payload = $this->requestPayload($request);
@@ -165,15 +168,16 @@ final class TicketController
                 new AssignTicketCommand(
                     ticketId: $ticketId,
                     assigneeId: (int) ($payload['assignee_id'] ?? 0),
-                    actorUserId: (int) ($authenticatedUser['id'] ?? 0)
+                    actorUserId: (int) ($authenticatedUser['id'] ?? 0),
+                    traceId: $traceId
                 )
             );
         } catch (DomainException $exception) {
-            return $this->errorResponse('FORBIDDEN', $exception->getMessage(), 403);
+            return $this->errorResponse('FORBIDDEN', $exception->getMessage(), 403, $traceId);
         } catch (TicketNotFoundException $exception) {
-            return $this->errorResponse('TICKET_NOT_FOUND', $exception->getMessage(), 404);
+            return $this->errorResponse('TICKET_NOT_FOUND', $exception->getMessage(), 404, $traceId);
         } catch (RuntimeException $exception) {
-            return $this->errorResponse('TICKET_CONFLICT', $exception->getMessage(), 409);
+            return $this->errorResponse('TICKET_CONFLICT', $exception->getMessage(), 409, $traceId);
         }
 
         return [
@@ -184,24 +188,26 @@ final class TicketController
     public function close(CloseTicketRequest $request, string $ticketId): array
     {
         $authenticatedUser = $this->authenticatedUser($request);
+        $traceId = $this->generateTraceId();
 
         if ($authenticatedUser === null) {
-            return $this->errorResponse('UNAUTHENTICATED', 'Usuário não autenticado.', 401);
+            return $this->errorResponse('UNAUTHENTICATED', 'Usuário não autenticado.', 401, $traceId);
         }
 
         try {
             $ticket = $this->closeTicketCommandHandler->handle(
                 new CloseTicketCommand(
                     ticketId: $ticketId,
-                    actorUserId: (int) ($authenticatedUser['id'] ?? 0)
+                    actorUserId: (int) ($authenticatedUser['id'] ?? 0),
+                    traceId: $traceId
                 )
             );
         } catch (DomainException $exception) {
-            return $this->errorResponse('FORBIDDEN', $exception->getMessage(), 403);
+            return $this->errorResponse('FORBIDDEN', $exception->getMessage(), 403, $traceId);
         } catch (TicketNotFoundException $exception) {
-            return $this->errorResponse('TICKET_NOT_FOUND', $exception->getMessage(), 404);
+            return $this->errorResponse('TICKET_NOT_FOUND', $exception->getMessage(), 404, $traceId);
         } catch (RuntimeException $exception) {
-            return $this->errorResponse('TICKET_CONFLICT', $exception->getMessage(), 409);
+            return $this->errorResponse('TICKET_CONFLICT', $exception->getMessage(), 409, $traceId);
         }
 
         return [
@@ -212,9 +218,10 @@ final class TicketController
     public function reply(ReplyTicketRequest $request, string $ticketId): array
     {
         $authenticatedUser = $this->authenticatedUser($request);
+        $traceId = $this->generateTraceId();
 
         if ($authenticatedUser === null) {
-            return $this->errorResponse('UNAUTHENTICATED', 'Usuário não autenticado.', 401);
+            return $this->errorResponse('UNAUTHENTICATED', 'Usuário não autenticado.', 401, $traceId);
         }
 
         $payload = $this->requestPayload($request);
@@ -227,13 +234,14 @@ final class TicketController
                 new ReplyTicketCommand(
                     ticketId: $ticketId,
                     authorId: $authorId,
-                    message: (string) ($payload['message'] ?? '')
+                    message: (string) ($payload['message'] ?? ''),
+                    traceId: $traceId
                 )
             );
         } catch (TicketNotFoundException $exception) {
-            return $this->errorResponse('TICKET_NOT_FOUND', $exception->getMessage(), 404);
+            return $this->errorResponse('TICKET_NOT_FOUND', $exception->getMessage(), 404, $traceId);
         } catch (RuntimeException $exception) {
-            return $this->errorResponse('TICKET_CONFLICT', $exception->getMessage(), 409);
+            return $this->errorResponse('TICKET_CONFLICT', $exception->getMessage(), 409, $traceId);
         }
 
         http_response_code(201);
@@ -273,9 +281,9 @@ final class TicketController
         ];
     }
 
-    private function errorResponse(string $code, string $message, int $status): array
+    private function errorResponse(string $code, string $message, int $status, ?string $traceId = null): array
     {
-        $traceId = $this->generateTraceId();
+        $traceId = $traceId ?? $this->generateTraceId();
         http_response_code($status);
         $this->logError($code, $message, $status, $traceId);
 

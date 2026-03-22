@@ -9,7 +9,8 @@ final class CloseTicketCommand
 {
     public function __construct(
         public readonly string $ticketId,
-        public readonly int $actorUserId
+        public readonly int $actorUserId,
+        public readonly ?string $traceId = null
     ) {
     }
 }

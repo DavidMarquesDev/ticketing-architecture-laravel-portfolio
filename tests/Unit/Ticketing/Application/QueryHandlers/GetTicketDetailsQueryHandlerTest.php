@@ -19,6 +19,7 @@ spl_autoload_register(static function (string $class): void {
 });
 
 use App\Modules\Ticketing\Application\Ports\Out\TicketRepositoryPort;
+use App\Modules\Ticketing\Application\Ports\Out\QueryTelemetryPort;
 use App\Modules\Ticketing\Application\Queries\GetTicketDetailsQuery;
 use App\Modules\Ticketing\Application\QueryHandlers\GetTicketDetailsQueryHandler;
 use App\Modules\Ticketing\Domain\Entities\Ticket;
@@ -30,21 +31,26 @@ $tests = [
         $repository = new FakeTicketRepository([
             $ticket->id() => $ticket,
         ]);
-        $handler = new GetTicketDetailsQueryHandler($repository);
+        $telemetry = new FakeQueryTelemetry();
+        $handler = new GetTicketDetailsQueryHandler($repository, $telemetry);
 
         $result = $handler->execute(new GetTicketDetailsQuery('t-details-1'));
 
         assertSame('t-details-1', $result->id(), 'Handler deve retornar ticket encontrado.');
+        assertSame('get_ticket_details', $telemetry->lastQueryName, 'Handler deve registrar nome da query.');
+        assertSame('success', $telemetry->lastStatus, 'Handler deve registrar sucesso.');
     },
     'get_ticket_details_throws_not_found_when_ticket_does_not_exist' => static function (): void {
         $repository = new FakeTicketRepository([]);
-        $handler = new GetTicketDetailsQueryHandler($repository);
+        $telemetry = new FakeQueryTelemetry();
+        $handler = new GetTicketDetailsQueryHandler($repository, $telemetry);
 
         assertThrows(
             static fn (): Ticket => $handler->execute(new GetTicketDetailsQuery('t-missing')),
             TicketNotFoundException::class,
             'Handler deve lançar TicketNotFoundException quando ticket não existir.'
         );
+        assertSame('failure', $telemetry->lastStatus, 'Handler deve registrar falha ao não encontrar ticket.');
     },
 ];
 
@@ -131,6 +137,22 @@ final class FakeTicketRepository implements TicketRepositoryPort
         $ticket = $this->tickets[$ticketId] ?? null;
 
         return $ticket instanceof Ticket ? $ticket : null;
+    }
+}
+
+final class FakeQueryTelemetry implements QueryTelemetryPort
+{
+    public string $lastQueryName = '';
+
+    public string $lastStatus = '';
+
+    public float $lastDurationMs = 0.0;
+
+    public function record(string $queryName, string $status, float $durationMs, array $context = []): void
+    {
+        $this->lastQueryName = $queryName;
+        $this->lastStatus = $status;
+        $this->lastDurationMs = $durationMs;
     }
 }
 

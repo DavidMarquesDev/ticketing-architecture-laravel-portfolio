@@ -28,6 +28,7 @@ if (!function_exists('app')) {
 use App\Modules\Ticketing\Application\Ports\Out\CachePort;
 use App\Modules\Ticketing\Application\Ports\Out\EventBusPort;
 use App\Modules\Ticketing\Application\Ports\Out\EventDispatcherPort;
+use App\Modules\Ticketing\Application\Ports\Out\QueryTelemetryPort;
 use App\Modules\Ticketing\Application\Ports\Out\TicketListCachePort;
 use App\Modules\Ticketing\Application\Ports\Out\UserReadRepositoryPort;
 use App\Modules\Ticketing\Application\Ports\In\AssignTicketCommandHandler;
@@ -50,6 +51,7 @@ use App\Modules\Ticketing\Domain\Events\TicketReplied;
 use App\Modules\Ticketing\Infrastructure\Cache\RedisCacheStore;
 use App\Modules\Ticketing\Infrastructure\Cache\RedisTicketListCache;
 use App\Modules\Ticketing\Infrastructure\Events\LaravelEventDispatcher;
+use App\Modules\Ticketing\Infrastructure\Observability\ErrorLogQueryTelemetry;
 use App\Modules\Ticketing\Infrastructure\Persistence\Repositories\AuthenticatedUserReadRepository;
 use App\Providers\TicketingServiceProvider;
 
@@ -65,6 +67,7 @@ $tests = [
         assertSame(LaravelEventDispatcher::class, $container->bindings[EventBusPort::class] ?? null, 'Provider deve bindar EventBusPort.');
         assertSame(LaravelEventDispatcher::class, $container->bindings[EventDispatcherPort::class] ?? null, 'Provider deve manter binding EventDispatcherPort.');
         assertSame(RedisTicketListCache::class, $container->bindings[TicketListCachePort::class] ?? null, 'Provider deve manter binding TicketListCachePort.');
+        assertSame(ErrorLogQueryTelemetry::class, $container->bindings[QueryTelemetryPort::class] ?? null, 'Provider deve bindar QueryTelemetryPort.');
         assertSame(AuthenticatedUserReadRepository::class, $container->singletons[UserReadRepositoryPort::class] ?? null, 'Provider deve registrar UserReadRepositoryPort.');
         assertSame(AssignTicketCommandHandlerService::class, $container->bindings[AssignTicketCommandHandler::class] ?? null, 'Provider deve bindar AssignTicketCommandHandler.');
         assertSame(CloseTicketCommandHandlerService::class, $container->bindings[CloseTicketCommandHandler::class] ?? null, 'Provider deve bindar CloseTicketCommandHandler.');

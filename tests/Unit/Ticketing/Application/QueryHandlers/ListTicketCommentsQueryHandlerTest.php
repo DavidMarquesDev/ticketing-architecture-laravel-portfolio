@@ -19,6 +19,7 @@ spl_autoload_register(static function (string $class): void {
 });
 
 use App\Modules\Ticketing\Application\Ports\Out\TicketCommentRepositoryPort;
+use App\Modules\Ticketing\Application\Ports\Out\QueryTelemetryPort;
 use App\Modules\Ticketing\Application\Ports\Out\TicketRepositoryPort;
 use App\Modules\Ticketing\Application\Queries\ListTicketCommentsQuery;
 use App\Modules\Ticketing\Application\QueryHandlers\ListTicketCommentsQueryHandler;
@@ -33,7 +34,8 @@ $tests = [
         $commentOne = TicketComment::create('c-1', 't-comments-1', 99, 'Mensagem 1');
         $commentTwo = TicketComment::create('c-2', 't-comments-1', 99, 'Mensagem 2');
         $commentRepository = new FakeTicketCommentRepository([$commentOne, $commentTwo]);
-        $handler = new ListTicketCommentsQueryHandler($ticketRepository, $commentRepository);
+        $telemetry = new FakeQueryTelemetry();
+        $handler = new ListTicketCommentsQueryHandler($ticketRepository, $commentRepository, $telemetry);
 
         $result = $handler->execute(new ListTicketCommentsQuery('t-comments-1', 1, 10));
 
@@ -42,17 +44,21 @@ $tests = [
         assertSame('t-comments-1', $commentRepository->lastTicketId, 'Repositório deve receber ticketId da query.');
         assertSame(1, $commentRepository->lastPage, 'Repositório deve receber página da query.');
         assertSame(10, $commentRepository->lastPerPage, 'Repositório deve receber perPage da query.');
+        assertSame('list_ticket_comments', $telemetry->lastQueryName, 'Handler deve registrar nome da query.');
+        assertSame('success', $telemetry->lastStatus, 'Handler deve registrar sucesso.');
     },
     'list_ticket_comments_throws_not_found_when_ticket_does_not_exist' => static function (): void {
         $ticketRepository = new FakeTicketRepository([]);
         $commentRepository = new FakeTicketCommentRepository([]);
-        $handler = new ListTicketCommentsQueryHandler($ticketRepository, $commentRepository);
+        $telemetry = new FakeQueryTelemetry();
+        $handler = new ListTicketCommentsQueryHandler($ticketRepository, $commentRepository, $telemetry);
 
         assertThrows(
             static fn (): array => $handler->execute(new ListTicketCommentsQuery('t-missing', 1, 10)),
             TicketNotFoundException::class,
             'Handler deve lançar TicketNotFoundException quando ticket não existir.'
         );
+        assertSame('failure', $telemetry->lastStatus, 'Handler deve registrar falha quando ticket não existir.');
     },
 ];
 
@@ -172,6 +178,22 @@ final class FakeTicketCommentRepository implements TicketCommentRepositoryPort
         );
 
         return array_values($filteredComments);
+    }
+}
+
+final class FakeQueryTelemetry implements QueryTelemetryPort
+{
+    public string $lastQueryName = '';
+
+    public string $lastStatus = '';
+
+    public float $lastDurationMs = 0.0;
+
+    public function record(string $queryName, string $status, float $durationMs, array $context = []): void
+    {
+        $this->lastQueryName = $queryName;
+        $this->lastStatus = $status;
+        $this->lastDurationMs = $durationMs;
     }
 }
 

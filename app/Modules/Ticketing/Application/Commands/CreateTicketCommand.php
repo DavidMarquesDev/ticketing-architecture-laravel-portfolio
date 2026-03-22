@@ -10,7 +10,8 @@ final class CreateTicketCommand
     public function __construct(
         public readonly int $requesterId,
         public readonly string $title,
-        public readonly string $description
+        public readonly string $description,
+        public readonly ?string $traceId = null
     ) {
     }
 }

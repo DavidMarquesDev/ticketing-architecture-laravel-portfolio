@@ -9,6 +9,7 @@ use App\Modules\Ticketing\Application\Ports\Out\TicketRepositoryPort;
 use App\Modules\Ticketing\Domain\Entities\Ticket;
 use App\Modules\Ticketing\Domain\Enums\TicketStatus;
 use App\Modules\Ticketing\Infrastructure\Persistence\Eloquent\TicketModel;
+use stdClass;
 
 final class EloquentTicketRepository implements TicketRepositoryPort
 {
@@ -41,6 +42,9 @@ final class EloquentTicketRepository implements TicketRepositoryPort
         string $sortDir = 'desc'
     ): array
     {
+        $page = max(1, $page);
+        $perPage = max(1, min($perPage, 100));
+        $searchTerm = $search !== null ? trim($search) : null;
         $query = TicketModel::query()->select([
             'id',
             'requester_id',
@@ -62,8 +66,8 @@ final class EloquentTicketRepository implements TicketRepositoryPort
             $query->where('assignee_id', $assigneeId);
         }
 
-        if ($search !== null && trim($search) !== '') {
-            $needle = '%' . trim($search) . '%';
+        if ($searchTerm !== null && $searchTerm !== '') {
+            $needle = '%' . $searchTerm . '%';
             $query->where(
                 static function (object $builder) use ($needle): void {
                     if (method_exists($builder, 'where') && method_exists($builder, 'orWhere')) {
@@ -86,11 +90,12 @@ final class EloquentTicketRepository implements TicketRepositoryPort
         $rows = $query
             ->orderBy($sortColumn, $direction)
             ->forPage($page, $perPage)
+            ->toBase()
             ->get();
 
         return array_values(
             array_map(
-                static fn (TicketModel $row): Ticket => self::toDomain($row),
+                static fn (stdClass $row): Ticket => self::toDomainFromRow($row),
                 $rows->all()
             )
         );
@@ -119,6 +124,18 @@ final class EloquentTicketRepository implements TicketRepositoryPort
             title: (string) $model->getAttribute('title'),
             description: (string) $model->getAttribute('description'),
             status: TicketStatus::from((string) $model->getAttribute('status'))
+        );
+    }
+
+    private static function toDomainFromRow(stdClass $row): Ticket
+    {
+        return new Ticket(
+            id: (string) ($row->id ?? ''),
+            requesterId: (int) ($row->requester_id ?? 0),
+            assigneeId: isset($row->assignee_id) ? (int) $row->assignee_id : null,
+            title: (string) ($row->title ?? ''),
+            description: (string) ($row->description ?? ''),
+            status: TicketStatus::from((string) ($row->status ?? TicketStatus::OPEN->value))
         );
     }
 }

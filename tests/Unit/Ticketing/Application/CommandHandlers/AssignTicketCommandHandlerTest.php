@@ -22,19 +22,39 @@ use App\Modules\Ticketing\Application\CommandHandlers\AssignTicketCommandHandler
 use App\Modules\Ticketing\Application\Commands\AssignTicketCommand;
 use App\Modules\Ticketing\Application\DTOs\AssignTicketInputDTO;
 use App\Modules\Ticketing\Application\Ports\In\AssignTicketUseCase;
+use App\Modules\Ticketing\Application\Ports\Out\QueryTelemetryPort;
 use App\Modules\Ticketing\Domain\Entities\Ticket;
 
 $tests = [
     'assign_ticket_command_handler_maps_command_to_input_dto' => static function (): void {
         $useCase = new FakeAssignTicketUseCase();
-        $handler = new AssignTicketCommandHandler($useCase);
+        $telemetry = new FakeQueryTelemetry();
+        $handler = new AssignTicketCommandHandler($useCase, $telemetry);
 
-        $handler->handle(new AssignTicketCommand('t-handler-1', 99, 77));
+        $handler->handle(new AssignTicketCommand('t-handler-1', 99, 77, 'trace-assign-1'));
         $capturedInput = $useCase->capturedInput;
 
         assertSame('t-handler-1', $capturedInput?->ticketId, 'Handler deve mapear ticketId.');
         assertSame(99, $capturedInput?->assigneeId, 'Handler deve mapear assigneeId.');
         assertSame(77, $capturedInput?->actorUserId, 'Handler deve mapear actorUserId.');
+        assertSame('assign_ticket', $telemetry->lastQueryName, 'Handler deve registrar nome da operação.');
+        assertSame('success', $telemetry->lastStatus, 'Handler deve registrar sucesso.');
+        assertSame('trace-assign-1', $telemetry->lastContext['trace_id'] ?? null, 'Handler deve propagar trace_id.');
+    },
+    'assign_ticket_command_handler_logs_failure' => static function (): void {
+        $telemetry = new FakeQueryTelemetry();
+        $handler = new AssignTicketCommandHandler(new FailingAssignTicketUseCase(), $telemetry);
+
+        try {
+            $handler->handle(new AssignTicketCommand('t-handler-fail', 22, 11, 'trace-assign-failure'));
+            throw new RuntimeException('Era esperado lançar RuntimeException.');
+        } catch (RuntimeException $exception) {
+            assertSame('Falha na atribuição.', $exception->getMessage(), 'Handler deve propagar erro do caso de uso.');
+        }
+
+        assertSame('assign_ticket', $telemetry->lastQueryName, 'Falha deve registrar nome da operação.');
+        assertSame('failure', $telemetry->lastStatus, 'Falha deve registrar status de erro.');
+        assertSame('trace-assign-failure', $telemetry->lastContext['trace_id'] ?? null, 'Falha deve manter trace_id.');
     },
 ];
 
@@ -73,6 +93,33 @@ final class FakeAssignTicketUseCase implements AssignTicketUseCase
         $this->capturedInput = $input;
 
         return Ticket::open($input->ticketId, 1, 'noop', 'noop');
+    }
+}
+
+final class FailingAssignTicketUseCase implements AssignTicketUseCase
+{
+    public function execute(AssignTicketInputDTO $input): Ticket
+    {
+        throw new RuntimeException('Falha na atribuição.');
+    }
+}
+
+final class FakeQueryTelemetry implements QueryTelemetryPort
+{
+    public ?string $lastQueryName = null;
+
+    public ?string $lastStatus = null;
+
+    /**
+     * @var array<string, int|string|null>
+     */
+    public array $lastContext = [];
+
+    public function record(string $queryName, string $status, float $durationMs, array $context = []): void
+    {
+        $this->lastQueryName = $queryName;
+        $this->lastStatus = $status;
+        $this->lastContext = $context;
     }
 }
 

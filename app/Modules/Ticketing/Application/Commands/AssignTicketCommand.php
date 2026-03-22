@@ -10,7 +10,8 @@ final class AssignTicketCommand
     public function __construct(
         public readonly string $ticketId,
         public readonly int $assigneeId,
-        public readonly int $actorUserId
+        public readonly int $actorUserId,
+        public readonly ?string $traceId = null
     ) {
     }
 }

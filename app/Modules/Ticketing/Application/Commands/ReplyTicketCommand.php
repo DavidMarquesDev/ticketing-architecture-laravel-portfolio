@@ -10,7 +10,8 @@ final class ReplyTicketCommand
     public function __construct(
         public readonly string $ticketId,
         public readonly int $authorId,
-        public readonly string $message
+        public readonly string $message,
+        public readonly ?string $traceId = null
     ) {
     }
 }
