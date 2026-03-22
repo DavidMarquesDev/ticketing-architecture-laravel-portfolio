@@ -9,8 +9,14 @@ use App\Modules\Ticketing\Application\Ports\Out\CachePort;
 
 final class RedisCacheStore implements CachePort
 {
+    /**
+     * @var array<string, mixed>
+     */
     private static array $store = [];
 
+    /**
+     * @var array<string, int>
+     */
     private static array $expiresAt = [];
 
     public function getByKey(string $key): mixed

@@ -27,6 +27,9 @@ final class EloquentTicketCommentRepository implements TicketCommentRepositoryPo
         return $comment;
     }
 
+    /**
+     * @return array<int, TicketComment>
+     */
     public function listByTicketId(string $ticketId, int $page, int $perPage): array
     {
         $rows = TicketCommentModel::query()

@@ -9,6 +9,7 @@ use App\Modules\Ticketing\Application\DTOs\ListTicketsInputDTO;
 use App\Modules\Ticketing\Application\Ports\In\ListTicketsUseCase;
 use App\Modules\Ticketing\Application\Ports\Out\TicketListCachePort;
 use App\Modules\Ticketing\Application\Ports\Out\TicketRepositoryPort;
+use App\Modules\Ticketing\Domain\Entities\Ticket;
 
 final class ListTicketsService implements ListTicketsUseCase
 {
@@ -20,6 +21,9 @@ final class ListTicketsService implements ListTicketsUseCase
     ) {
     }
 
+    /**
+     * @return array<int, Ticket>
+     */
     public function execute(ListTicketsInputDTO $input): array
     {
         $cachedTickets = $this->ticketListCache->get(

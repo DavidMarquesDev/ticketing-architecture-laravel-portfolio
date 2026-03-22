@@ -10,5 +10,9 @@ use App\Modules\Ticketing\Domain\Entities\TicketComment;
 interface TicketCommentRepositoryPort
 {
     public function save(TicketComment $comment): TicketComment;
+
+    /**
+     * @return array<int, TicketComment>
+     */
     public function listByTicketId(string $ticketId, int $page, int $perPage): array;
 }

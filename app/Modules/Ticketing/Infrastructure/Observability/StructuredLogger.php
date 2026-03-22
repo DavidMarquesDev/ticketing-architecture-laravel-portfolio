@@ -7,6 +7,9 @@ namespace App\Modules\Ticketing\Infrastructure\Observability;
 
 final class StructuredLogger
 {
+    /**
+     * @param array<string, mixed> $payload
+     */
     public static function log(string $type, array $payload = []): void
     {
         $traceId = self::normalizeNullableString($payload['trace_id'] ?? null) ?? self::generateTraceId();

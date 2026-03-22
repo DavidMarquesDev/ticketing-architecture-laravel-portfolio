@@ -16,6 +16,9 @@ final class QueueIntegrationEventPublisher implements IntegrationEventPublisherP
     ) {
     }
 
+    /**
+     * @param array<string, mixed> $payload
+     */
     public function publish(string $eventName, array $payload): void
     {
         $this->queueDispatcher->dispatch(

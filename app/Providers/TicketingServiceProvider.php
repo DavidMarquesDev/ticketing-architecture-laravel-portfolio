@@ -154,9 +154,7 @@ final class TicketingServiceProvider
             return null;
         }
 
-        $container = call_user_func('app');
-
-        return is_object($container) ? $container : null;
+        return call_user_func('app');
     }
 
     private function supportsEloquent(): bool
@@ -333,42 +331,46 @@ final class TicketingServiceProvider
 
     private function resolveRateLimit(string $envKey, int $default): int
     {
-        $value = null;
+        $value = getenv($envKey);
 
-        if ($value === null || $value === false || $value === '') {
-            $value = getenv($envKey);
+        if ($value === false || $value === '') {
+            $value = $_ENV[$envKey] ?? null;
         }
 
-        if (($value === null || $value === false || $value === '') && array_key_exists($envKey, $_ENV)) {
-            $value = $_ENV[$envKey];
-        }
-
-        if (!is_numeric($value)) {
+        if (!is_scalar($value)) {
             return $default;
         }
 
-        $resolved = (int) $value;
+        $normalizedValue = trim((string) $value);
+
+        if ($normalizedValue === '' || !is_numeric($normalizedValue)) {
+            return $default;
+        }
+
+        $resolved = (int) $normalizedValue;
 
         return $resolved > 0 ? $resolved : $default;
     }
 
     private function resolveRateWindow(string $envKey, int $default): int
     {
-        $value = null;
+        $value = getenv($envKey);
 
-        if ($value === null || $value === false || $value === '') {
-            $value = getenv($envKey);
+        if ($value === false || $value === '') {
+            $value = $_ENV[$envKey] ?? null;
         }
 
-        if (($value === null || $value === false || $value === '') && array_key_exists($envKey, $_ENV)) {
-            $value = $_ENV[$envKey];
-        }
-
-        if (!is_numeric($value)) {
+        if (!is_scalar($value)) {
             return $default;
         }
 
-        $resolved = (int) $value;
+        $normalizedValue = trim((string) $value);
+
+        if ($normalizedValue === '' || !is_numeric($normalizedValue)) {
+            return $default;
+        }
+
+        $resolved = (int) $normalizedValue;
 
         if ($resolved < 10) {
             return 10;

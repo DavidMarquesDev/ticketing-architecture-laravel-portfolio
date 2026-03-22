@@ -11,8 +11,14 @@ final class RedisTicketListCache implements TicketListCachePort
 {
     private const KEYS_INDEX = 'ticket:list:keys';
 
+    /**
+     * @var array<string, mixed>
+     */
     private static array $store = [];
 
+    /**
+     * @var array<string, int>
+     */
     private static array $expiresAt = [];
 
     public function get(

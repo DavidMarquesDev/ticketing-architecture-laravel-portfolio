@@ -10,5 +10,8 @@ use App\Modules\Ticketing\Domain\Entities\TicketComment;
 
 interface ListTicketCommentsUseCase
 {
+    /**
+     * @return array<int, TicketComment>
+     */
     public function execute(ListTicketCommentsQuery $query): array;
 }

@@ -10,6 +10,9 @@ use App\Modules\Ticketing\Domain\Entities\TicketComment;
 
 final class InMemoryTicketCommentRepository implements TicketCommentRepositoryPort
 {
+    /**
+     * @var array<string, TicketComment>
+     */
     private static array $comments = [];
 
     public function save(TicketComment $comment): TicketComment
@@ -19,6 +22,9 @@ final class InMemoryTicketCommentRepository implements TicketCommentRepositoryPo
         return $comment;
     }
 
+    /**
+     * @return array<int, TicketComment>
+     */
     public function listByTicketId(string $ticketId, int $page, int $perPage): array
     {
         $filteredComments = array_filter(

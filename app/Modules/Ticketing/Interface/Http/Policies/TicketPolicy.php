@@ -24,6 +24,9 @@ final class TicketPolicy
         return $this->extractUserId($user) > 0;
     }
 
+    /**
+     * @param array<int, string> $allowedRoles
+     */
     private function hasAnyRole(mixed $user, array $allowedRoles): bool
     {
         $roles = array_map('strtolower', $this->extractRoles($user));
@@ -62,6 +65,9 @@ final class TicketPolicy
         return 0;
     }
 
+    /**
+     * @return array<int, string>
+     */
     private function extractRoles(mixed $user): array
     {
         if (is_array($user)) {
@@ -87,6 +93,9 @@ final class TicketPolicy
         return [];
     }
 
+    /**
+     * @return array<int, string>
+     */
     private function normalizeRoles(mixed $roles): array
     {
         if (!is_array($roles) && !$roles instanceof Traversable) {

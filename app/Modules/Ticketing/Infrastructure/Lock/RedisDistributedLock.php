@@ -10,6 +10,9 @@ use RuntimeException;
 
 final class RedisDistributedLock implements DistributedLockPort
 {
+    /**
+     * @var array<string, int>
+     */
     private static array $locks = [];
 
     public function execute(string $key, int $seconds, callable $callback): mixed

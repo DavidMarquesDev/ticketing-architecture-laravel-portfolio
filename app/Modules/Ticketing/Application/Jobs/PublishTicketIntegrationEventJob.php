@@ -9,6 +9,9 @@ use App\Modules\Ticketing\Infrastructure\Observability\StructuredLogger;
 
 final class PublishTicketIntegrationEventJob
 {
+    /**
+     * @param array<string, mixed> $payload
+     */
     public function __construct(
         public readonly string $eventName,
         public readonly array $payload

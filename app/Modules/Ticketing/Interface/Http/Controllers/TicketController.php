@@ -72,6 +72,9 @@ final class TicketController
     ) {
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function store(StoreTicketRequest $request): array
     {
         $authenticatedUser = $this->authenticatedUser($request);
@@ -102,6 +105,9 @@ final class TicketController
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function index(ListTicketsRequest $request): array
     {
         $authenticatedUser = $this->authenticatedUser($request);
@@ -135,6 +141,9 @@ final class TicketController
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function show(ShowTicketRequest $request, string $ticketId): array
     {
         $authenticatedUser = $this->authenticatedUser($request);
@@ -156,6 +165,9 @@ final class TicketController
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function assign(AssignTicketRequest $request, string $ticketId): array
     {
         $authenticatedUser = $this->authenticatedUser($request);
@@ -175,7 +187,7 @@ final class TicketController
                 new AssignTicketCommand(
                     ticketId: $ticketId,
                     assigneeId: (int) ($payload['assignee_id'] ?? 0),
-                    actorUserId: (int) ($authenticatedUser['id'] ?? 0),
+                    actorUserId: $authenticatedUser['id'],
                     traceId: $traceId
                 )
             );
@@ -192,6 +204,9 @@ final class TicketController
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function close(CloseTicketRequest $request, string $ticketId): array
     {
         $authenticatedUser = $this->authenticatedUser($request);
@@ -209,7 +224,7 @@ final class TicketController
             $ticket = $this->closeTicketCommandHandler->handle(
                 new CloseTicketCommand(
                     ticketId: $ticketId,
-                    actorUserId: (int) ($authenticatedUser['id'] ?? 0),
+                    actorUserId: $authenticatedUser['id'],
                     traceId: $traceId
                 )
             );
@@ -226,6 +241,9 @@ final class TicketController
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function reply(ReplyTicketRequest $request, string $ticketId): array
     {
         $authenticatedUser = $this->authenticatedUser($request);
@@ -265,6 +283,9 @@ final class TicketController
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     public function comments(ListTicketCommentsRequest $request, string $ticketId): array
     {
         $authenticatedUser = $this->authenticatedUser($request);
@@ -298,6 +319,9 @@ final class TicketController
         ];
     }
 
+    /**
+     * @return array{error: array{code: string, message: string, details: array<int, mixed>, trace_id: string}}
+     */
     private function errorResponse(string $code, string $message, int $status, ?string $traceId = null): array
     {
         $traceId = $traceId ?? $this->generateTraceId();
@@ -400,6 +424,9 @@ final class TicketController
         return (bool) $gate->allows($ability);
     }
 
+    /**
+     * @return object|array<string, mixed>|null
+     */
     private function requestUserObject(object $request): object|array|null
     {
         if (!method_exists($request, 'user')) {
@@ -415,6 +442,9 @@ final class TicketController
         return null;
     }
 
+    /**
+     * @return array{page: int, per_page: int, count: int, has_more: bool}
+     */
     private function paginationMeta(int $page, int $perPage, int $count): array
     {
         return [
@@ -425,6 +455,9 @@ final class TicketController
         ];
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function requestPayload(object $request): array
     {
         if (method_exists($request, 'validated')) {
@@ -446,6 +479,9 @@ final class TicketController
         return $this->payloadFromInputStream();
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function queryParams(object $request): array
     {
         if (method_exists($request, 'query')) {
@@ -456,9 +492,12 @@ final class TicketController
             }
         }
 
-        return is_array($_GET) ? $_GET : [];
+        return $_GET;
     }
 
+    /**
+     * @return array<string, mixed>
+     */
     private function payloadFromInputStream(): array
     {
         $content = file_get_contents('php://input');
@@ -472,6 +511,9 @@ final class TicketController
         return is_array($decoded) ? $decoded : [];
     }
 
+    /**
+     * @return array{id: int}|null
+     */
     private function authenticatedUser(object $request): ?array
     {
         if (!method_exists($request, 'user')) {
@@ -512,6 +554,9 @@ final class TicketController
         return 0;
     }
 
+    /**
+     * @return array{id: int}|null
+     */
     private function fallbackAuthenticatedUser(): ?array
     {
         if (array_key_exists('ticketing_authenticated_user', $GLOBALS)) {

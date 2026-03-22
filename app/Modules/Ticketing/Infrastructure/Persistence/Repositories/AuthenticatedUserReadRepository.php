@@ -39,6 +39,9 @@ final class AuthenticatedUserReadRepository implements UserReadRepositoryPort
         return array_intersect($userRoles, $allowedRoles) !== [];
     }
 
+    /**
+     * @return object|array<string, mixed>|null
+     */
     private function authenticatedUser(): object|array|null
     {
         if (!function_exists('auth')) {
@@ -60,6 +63,9 @@ final class AuthenticatedUserReadRepository implements UserReadRepositoryPort
         return null;
     }
 
+    /**
+     * @param object|array<string, mixed> $user
+     */
     private function extractUserId(object|array $user): int
     {
         if (is_array($user)) {
@@ -82,6 +88,7 @@ final class AuthenticatedUserReadRepository implements UserReadRepositoryPort
     }
 
     /**
+     * @param object|array<string, mixed> $user
      * @return array<int, string>
      */
     private function extractUserRoles(object|array $user): array
