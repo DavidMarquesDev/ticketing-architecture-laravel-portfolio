@@ -24,6 +24,7 @@ class ComposerStaticInit338b9e0d04fed919fdccfa675fce7705
         'a1105708a18b76903365ca1c4aa61b02' => __DIR__ . '/..' . '/symfony/translation/Resources/functions.php',
         '37a3dc5111fe8f707ab4c132ef1dbc62' => __DIR__ . '/..' . '/guzzlehttp/guzzle/src/functions_include.php',
         '47e1160838b5e5a10346ac4084b58c23' => __DIR__ . '/..' . '/laravel/prompts/src/helpers.php',
+        '6124b4c8570aa390c21fafd04a26c69f' => __DIR__ . '/..' . '/myclabs/deep-copy/src/DeepCopy/deep_copy.php',
         '35a6ad97d21e794e7e22a17d806652e4' => __DIR__ . '/..' . '/nunomaduro/termwind/src/Functions.php',
         'e39a8b23c42d4e1452234d762b03835a' => __DIR__ . '/..' . '/ramsey/uuid/src/functions.php',
         '476ca15b8d69b04665cd879be9cb4c68' => __DIR__ . '/..' . '/laravel/framework/src/Illuminate/Collections/functions.php',
@@ -77,6 +78,7 @@ class ComposerStaticInit338b9e0d04fed919fdccfa675fce7705
             'Symfony\\Component\\CssSelector\\' => 30,
             'Symfony\\Component\\Console\\' => 26,
             'Symfony\\Component\\Clock\\' => 24,
+            'Spatie\\LaravelPackageTools\\' => 27,
         ),
         'R' =>
         array (
@@ -93,7 +95,9 @@ class ComposerStaticInit338b9e0d04fed919fdccfa675fce7705
             'Psr\\Container\\' => 14,
             'Psr\\Clock\\' => 10,
             'Predis\\' => 7,
+            'PhpParser\\' => 10,
             'PhpOption\\' => 10,
+            'PHPStan\\PhpDocParser\\' => 21,
         ),
         'N' =>
         array (
@@ -142,6 +146,9 @@ class ComposerStaticInit338b9e0d04fed919fdccfa675fce7705
             'Doctrine\\Inflector\\' => 19,
             'Doctrine\\Common\\Lexer\\' => 22,
             'Dflydev\\DotAccessData\\' => 22,
+            'DeepCopy\\' => 9,
+            'Dedoc\\Scramble\\Database\\Factories\\' => 34,
+            'Dedoc\\Scramble\\' => 15,
             'Database\\Seeders\\' => 17,
         ),
         'C' =>
@@ -285,6 +292,10 @@ class ComposerStaticInit338b9e0d04fed919fdccfa675fce7705
         array (
             0 => __DIR__ . '/..' . '/symfony/clock',
         ),
+        'Spatie\\LaravelPackageTools\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/spatie/laravel-package-tools/src',
+        ),
         'Ramsey\\Uuid\\' =>
         array (
             0 => __DIR__ . '/..' . '/ramsey/uuid/src',
@@ -326,9 +337,17 @@ class ComposerStaticInit338b9e0d04fed919fdccfa675fce7705
         array (
             0 => __DIR__ . '/..' . '/predis/predis/src',
         ),
+        'PhpParser\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/nikic/php-parser/lib/PhpParser',
+        ),
         'PhpOption\\' =>
         array (
             0 => __DIR__ . '/..' . '/phpoption/phpoption/src/PhpOption',
+        ),
+        'PHPStan\\PhpDocParser\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/phpstan/phpdoc-parser/src',
         ),
         'Nette\\' =>
         array (
@@ -429,6 +448,18 @@ class ComposerStaticInit338b9e0d04fed919fdccfa675fce7705
         'Dflydev\\DotAccessData\\' =>
         array (
             0 => __DIR__ . '/..' . '/dflydev/dot-access-data/src',
+        ),
+        'DeepCopy\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/myclabs/deep-copy/src/DeepCopy',
+        ),
+        'Dedoc\\Scramble\\Database\\Factories\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/dedoc/scramble/database/factories',
+        ),
+        'Dedoc\\Scramble\\' =>
+        array (
+            0 => __DIR__ . '/..' . '/dedoc/scramble/src',
         ),
         'Database\\Seeders\\' =>
         array (

@@ -2,21 +2,19 @@
 
 declare(strict_types=1);
 
-return new class
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
 {
     public function up(): void
     {
-        if (!class_exists('\Illuminate\Support\Facades\Schema')) {
+        if (Schema::hasTable('personal_access_tokens')) {
             return;
         }
 
-        $schemaClass = '\Illuminate\Support\Facades\Schema';
-
-        $schemaClass::create('personal_access_tokens', static function (object $table): void {
-            if (!method_exists($table, 'id')) {
-                return;
-            }
-
+        Schema::create('personal_access_tokens', static function (Blueprint $table): void {
             $table->id();
             $table->morphs('tokenable');
             $table->string('name');
@@ -25,17 +23,11 @@ return new class
             $table->timestamp('last_used_at')->nullable();
             $table->timestamp('expires_at')->nullable();
             $table->timestamps();
-            $table->index(['tokenable_type', 'tokenable_id']);
         });
     }
 
     public function down(): void
     {
-        if (!class_exists('\Illuminate\Support\Facades\Schema')) {
-            return;
-        }
-
-        $schemaClass = '\Illuminate\Support\Facades\Schema';
-        $schemaClass::dropIfExists('personal_access_tokens');
+        Schema::dropIfExists('personal_access_tokens');
     }
 };

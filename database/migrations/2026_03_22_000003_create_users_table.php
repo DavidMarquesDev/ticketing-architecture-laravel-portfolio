@@ -2,22 +2,49 @@
 
 declare(strict_types=1);
 
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 
-return new class
+return new class extends Migration
 {
     public function up(): void
     {
-        if (!class_exists('\Illuminate\Support\Facades\Schema')) {
+        if (Schema::hasTable('users')) {
+            Schema::table('users', static function (Blueprint $table): void {
+                if (!Schema::hasColumn('users', 'name')) {
+                    $table->string('name');
+                }
+
+                if (!Schema::hasColumn('users', 'email')) {
+                    $table->string('email');
+                }
+
+                if (!Schema::hasColumn('users', 'password')) {
+                    $table->string('password');
+                }
+
+                if (!Schema::hasColumn('users', 'roles')) {
+                    $table->json('roles')->nullable();
+                }
+
+                if (!Schema::hasColumn('users', 'remember_token')) {
+                    $table->rememberToken();
+                }
+
+                if (!Schema::hasColumn('users', 'created_at')) {
+                    $table->timestamp('created_at')->nullable();
+                }
+
+                if (!Schema::hasColumn('users', 'updated_at')) {
+                    $table->timestamp('updated_at')->nullable();
+                }
+            });
+
             return;
         }
 
-        $schemaClass = '\Illuminate\Support\Facades\Schema';
-
-        $schemaClass::create('users', static function (object $table): void {
-            if (!method_exists($table, 'id')) {
-                return;
-            }
-
+        Schema::create('users', static function (Blueprint $table): void {
             $table->id();
             $table->string('name');
             $table->string('email')->unique();
@@ -31,11 +58,6 @@ return new class
 
     public function down(): void
     {
-        if (!class_exists('\Illuminate\Support\Facades\Schema')) {
-            return;
-        }
-
-        $schemaClass = '\Illuminate\Support\Facades\Schema';
-        $schemaClass::dropIfExists('users');
+        Schema::dropIfExists('users');
     }
 };
