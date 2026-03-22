@@ -12,6 +12,8 @@ use App\Modules\Ticketing\Application\Ports\Out\TicketRepositoryPort;
 
 final class ListTicketsService implements ListTicketsUseCase
 {
+    private const CACHE_TTL_SECONDS = 120;
+
     public function __construct(
         private readonly TicketRepositoryPort $ticketRepository,
         private readonly TicketListCachePort $ticketListCache
@@ -20,14 +22,43 @@ final class ListTicketsService implements ListTicketsUseCase
 
     public function execute(ListTicketsInputDTO $input): array
     {
-        $cachedTickets = $this->ticketListCache->get($input->page, $input->perPage);
+        $cachedTickets = $this->ticketListCache->get(
+            page: $input->page,
+            perPage: $input->perPage,
+            status: $input->status,
+            requesterId: $input->requesterId,
+            assigneeId: $input->assigneeId,
+            search: $input->search,
+            sortBy: $input->sortBy,
+            sortDir: $input->sortDir
+        );
 
         if ($cachedTickets !== null) {
             return $cachedTickets;
         }
 
-        $tickets = $this->ticketRepository->list($input->page, $input->perPage);
-        $this->ticketListCache->put($input->page, $input->perPage, $tickets, 120);
+        $tickets = $this->ticketRepository->list(
+            page: $input->page,
+            perPage: $input->perPage,
+            status: $input->status,
+            requesterId: $input->requesterId,
+            assigneeId: $input->assigneeId,
+            search: $input->search,
+            sortBy: $input->sortBy,
+            sortDir: $input->sortDir
+        );
+        $this->ticketListCache->put(
+            page: $input->page,
+            perPage: $input->perPage,
+            tickets: $tickets,
+            seconds: self::CACHE_TTL_SECONDS,
+            status: $input->status,
+            requesterId: $input->requesterId,
+            assigneeId: $input->assigneeId,
+            search: $input->search,
+            sortBy: $input->sortBy,
+            sortDir: $input->sortDir
+        );
 
         return $tickets;
     }

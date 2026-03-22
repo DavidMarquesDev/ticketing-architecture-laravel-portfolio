@@ -189,7 +189,16 @@ namespace {
         },
         'ticket_controller_index_reads_query_and_returns_list_contract' => static function (): void {
             resetHttpContext();
-            $_GET = ['page' => '2', 'per_page' => '1'];
+            $_GET = [
+                'page' => '2',
+                'per_page' => '1',
+                'status' => 'pending',
+                'requester_id' => '20',
+                'assignee_id' => '77',
+                'search' => 'checkout',
+                'sort_by' => 'title',
+                'sort_dir' => 'asc',
+            ];
 
             $controller = new TicketController(
                 noopCreateUseCase(),
@@ -213,6 +222,12 @@ namespace {
 
             assertSame(2, $input->page, 'Index deve mapear page para DTO.');
             assertSame(1, $input->perPage, 'Index deve mapear per_page para DTO.');
+            assertSame('pending', $input->status, 'Index deve mapear status para DTO.');
+            assertSame(20, $input->requesterId, 'Index deve mapear requester_id para DTO.');
+            assertSame(77, $input->assigneeId, 'Index deve mapear assignee_id para DTO.');
+            assertSame('checkout', $input->search, 'Index deve mapear search para DTO.');
+            assertSame('title', $input->sortBy, 'Index deve mapear sort_by para DTO.');
+            assertSame('asc', $input->sortDir, 'Index deve mapear sort_dir para DTO.');
             assertSame('t-http-2', $response['data'][0]['id'], 'Index deve serializar id.');
             assertSame('Título 2', $response['data'][0]['title'], 'Index deve serializar título.');
         },

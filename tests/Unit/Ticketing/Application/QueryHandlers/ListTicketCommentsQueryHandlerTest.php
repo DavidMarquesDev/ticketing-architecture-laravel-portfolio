@@ -120,7 +120,16 @@ final class FakeTicketRepository implements TicketRepositoryPort
         return $ticket;
     }
 
-    public function list(int $page, int $perPage): array
+    public function list(
+        int $page,
+        int $perPage,
+        ?string $status = null,
+        ?int $requesterId = null,
+        ?int $assigneeId = null,
+        ?string $search = null,
+        string $sortBy = 'id',
+        string $sortDir = 'desc'
+    ): array
     {
         return array_values($this->tickets);
     }

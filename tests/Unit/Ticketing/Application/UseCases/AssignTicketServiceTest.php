@@ -138,7 +138,16 @@ final class FakeTicketRepository implements TicketRepositoryPort
         return $ticket;
     }
 
-    public function list(int $page, int $perPage): array
+    public function list(
+        int $page,
+        int $perPage,
+        ?string $status = null,
+        ?int $requesterId = null,
+        ?int $assigneeId = null,
+        ?string $search = null,
+        string $sortBy = 'id',
+        string $sortDir = 'desc'
+    ): array
     {
         return array_values($this->tickets);
     }
@@ -160,12 +169,32 @@ final class FakeTicketListCache implements TicketListCachePort
     ) {
     }
 
-    public function get(int $page, int $perPage): ?array
+    public function get(
+        int $page,
+        int $perPage,
+        ?string $status = null,
+        ?int $requesterId = null,
+        ?int $assigneeId = null,
+        ?string $search = null,
+        string $sortBy = 'id',
+        string $sortDir = 'desc'
+    ): ?array
     {
         return $this->cachedTickets;
     }
 
-    public function put(int $page, int $perPage, array $tickets, int $seconds): void
+    public function put(
+        int $page,
+        int $perPage,
+        array $tickets,
+        int $seconds,
+        ?string $status = null,
+        ?int $requesterId = null,
+        ?int $assigneeId = null,
+        ?string $search = null,
+        string $sortBy = 'id',
+        string $sortDir = 'desc'
+    ): void
     {
     }
 

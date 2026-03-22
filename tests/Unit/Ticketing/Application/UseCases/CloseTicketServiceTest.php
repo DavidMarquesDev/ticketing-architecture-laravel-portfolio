@@ -34,7 +34,7 @@ $tests = [
     'close_ticket_success' => static function (): void {
         $ticket = Ticket::open('t-1', 10, 'Erro checkout', 'Falha 500');
         $ticketRepository = new FakeTicketRepository([$ticket->id() => $ticket]);
-        $cache = new FakeTicketListCache();
+        $cache = new CloseFakeTicketListCache();
         $lock = new FakeLock();
         $dispatcher = new FakeEventDispatcher();
 
@@ -49,7 +49,7 @@ $tests = [
     },
     'close_ticket_not_found' => static function (): void {
         $ticketRepository = new FakeTicketRepository([]);
-        $cache = new FakeTicketListCache();
+        $cache = new CloseFakeTicketListCache();
         $lock = new FakeLock();
         $dispatcher = new FakeEventDispatcher();
         $service = new CloseTicketService($ticketRepository, $cache, $lock, $dispatcher);
@@ -64,7 +64,7 @@ $tests = [
         $ticket->close();
 
         $ticketRepository = new FakeTicketRepository([$ticket->id() => $ticket]);
-        $cache = new FakeTicketListCache();
+        $cache = new CloseFakeTicketListCache();
         $lock = new FakeLock();
         $dispatcher = new FakeEventDispatcher();
         $service = new CloseTicketService($ticketRepository, $cache, $lock, $dispatcher);
@@ -144,7 +144,16 @@ final class FakeTicketRepository implements TicketRepositoryPort
         return $ticket;
     }
 
-    public function list(int $page, int $perPage): array
+    public function list(
+        int $page,
+        int $perPage,
+        ?string $status = null,
+        ?int $requesterId = null,
+        ?int $assigneeId = null,
+        ?string $search = null,
+        string $sortBy = 'id',
+        string $sortDir = 'desc'
+    ): array
     {
         return array_values($this->tickets);
     }
@@ -157,16 +166,36 @@ final class FakeTicketRepository implements TicketRepositoryPort
     }
 }
 
-final class FakeTicketListCache implements TicketListCachePort
+final class CloseFakeTicketListCache implements TicketListCachePort
 {
     public bool $forgetCalled = false;
 
-    public function get(int $page, int $perPage): ?array
+    public function get(
+        int $page,
+        int $perPage,
+        ?string $status = null,
+        ?int $requesterId = null,
+        ?int $assigneeId = null,
+        ?string $search = null,
+        string $sortBy = 'id',
+        string $sortDir = 'desc'
+    ): ?array
     {
         return null;
     }
 
-    public function put(int $page, int $perPage, array $tickets, int $seconds): void
+    public function put(
+        int $page,
+        int $perPage,
+        array $tickets,
+        int $seconds,
+        ?string $status = null,
+        ?int $requesterId = null,
+        ?int $assigneeId = null,
+        ?string $search = null,
+        string $sortBy = 'id',
+        string $sortDir = 'desc'
+    ): void
     {
     }
 

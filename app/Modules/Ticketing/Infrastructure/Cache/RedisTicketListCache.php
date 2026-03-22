@@ -15,9 +15,18 @@ final class RedisTicketListCache implements TicketListCachePort
 
     private static array $expiresAt = [];
 
-    public function get(int $page, int $perPage): ?array
+    public function get(
+        int $page,
+        int $perPage,
+        ?string $status = null,
+        ?int $requesterId = null,
+        ?int $assigneeId = null,
+        ?string $search = null,
+        string $sortBy = 'id',
+        string $sortDir = 'desc'
+    ): ?array
     {
-        $key = $this->key($page, $perPage);
+        $key = $this->key($page, $perPage, $status, $requesterId, $assigneeId, $search, $sortBy, $sortDir);
 
         if ($this->isExpired($key)) {
             $this->forget($key);
@@ -30,9 +39,20 @@ final class RedisTicketListCache implements TicketListCachePort
         return is_array($value) ? $value : null;
     }
 
-    public function put(int $page, int $perPage, array $tickets, int $seconds): void
+    public function put(
+        int $page,
+        int $perPage,
+        array $tickets,
+        int $seconds,
+        ?string $status = null,
+        ?int $requesterId = null,
+        ?int $assigneeId = null,
+        ?string $search = null,
+        string $sortBy = 'id',
+        string $sortDir = 'desc'
+    ): void
     {
-        $key = $this->key($page, $perPage);
+        $key = $this->key($page, $perPage, $status, $requesterId, $assigneeId, $search, $sortBy, $sortDir);
         $this->putValue($key, $tickets, $seconds);
         $keys = self::$store[self::KEYS_INDEX] ?? [];
 
@@ -69,9 +89,30 @@ final class RedisTicketListCache implements TicketListCachePort
         $this->forget(self::KEYS_INDEX);
     }
 
-    private function key(int $page, int $perPage): string
+    private function key(
+        int $page,
+        int $perPage,
+        ?string $status,
+        ?int $requesterId,
+        ?int $assigneeId,
+        ?string $search,
+        string $sortBy,
+        string $sortDir
+    ): string
     {
-        return sprintf('ticket:list:p%d:pp%d', $page, $perPage);
+        $searchToken = $search === null ? '-' : sha1(strtolower(trim($search)));
+
+        return sprintf(
+            'ticket:list:p%d:pp%d:st:%s:req:%s:asg:%s:sea:%s:sb:%s:sd:%s',
+            $page,
+            $perPage,
+            $status ?? '-',
+            $requesterId === null ? '-' : (string) $requesterId,
+            $assigneeId === null ? '-' : (string) $assigneeId,
+            $searchToken,
+            $sortBy,
+            $sortDir
+        );
     }
 
     private function putValue(string $key, mixed $value, int $seconds): void

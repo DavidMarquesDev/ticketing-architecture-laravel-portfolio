@@ -110,7 +110,13 @@ final class TicketController
         $tickets = $this->listTicketsUseCase->execute(
             new ListTicketsInputDTO(
                 page: (int) ($query['page'] ?? 1),
-                perPage: (int) ($query['per_page'] ?? 15)
+                perPage: (int) ($query['per_page'] ?? 15),
+                status: $this->nullableString($query['status'] ?? null),
+                requesterId: $this->nullableInt($query['requester_id'] ?? null),
+                assigneeId: $this->nullableInt($query['assignee_id'] ?? null),
+                search: $this->nullableString($query['search'] ?? null),
+                sortBy: $this->sortableField($query['sort_by'] ?? null),
+                sortDir: $this->sortableDirection($query['sort_dir'] ?? null)
             )
         );
 
@@ -268,16 +274,85 @@ final class TicketController
 
     private function errorResponse(string $code, string $message, int $status): array
     {
+        $traceId = $this->generateTraceId();
         http_response_code($status);
+        $this->logError($code, $message, $status, $traceId);
 
         return [
             'error' => [
                 'code' => $code,
                 'message' => $message,
                 'details' => [],
-                'trace_id' => '',
+                'trace_id' => $traceId,
             ],
         ];
+    }
+
+    private function nullableString(mixed $value): ?string
+    {
+        if (!is_string($value)) {
+            return null;
+        }
+
+        $trimmed = trim($value);
+
+        return $trimmed === '' ? null : $trimmed;
+    }
+
+    private function nullableInt(mixed $value): ?int
+    {
+        if (!is_numeric($value)) {
+            return null;
+        }
+
+        $integer = (int) $value;
+
+        return $integer > 0 ? $integer : null;
+    }
+
+    private function sortableField(mixed $value): string
+    {
+        if (!is_string($value)) {
+            return 'id';
+        }
+
+        $normalized = strtolower(trim($value));
+        $allowed = ['id', 'status', 'title', 'requester_id', 'assignee_id'];
+
+        return in_array($normalized, $allowed, true) ? $normalized : 'id';
+    }
+
+    private function sortableDirection(mixed $value): string
+    {
+        if (!is_string($value)) {
+            return 'desc';
+        }
+
+        $normalized = strtolower(trim($value));
+
+        return in_array($normalized, ['asc', 'desc'], true) ? $normalized : 'desc';
+    }
+
+    private function generateTraceId(): string
+    {
+        return bin2hex(random_bytes(8));
+    }
+
+    private function logError(string $code, string $message, int $status, string $traceId): void
+    {
+        error_log(
+            json_encode(
+                [
+                    'module' => 'ticketing',
+                    'type' => 'http_error',
+                    'code' => $code,
+                    'message' => $message,
+                    'status' => $status,
+                    'trace_id' => $traceId,
+                ],
+                JSON_UNESCAPED_UNICODE
+            ) ?: ''
+        );
     }
 
     private function requestPayload(object $request): array

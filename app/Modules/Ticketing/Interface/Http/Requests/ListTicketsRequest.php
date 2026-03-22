@@ -19,6 +19,12 @@ final class ListTicketsRequest extends FormRequest
         return [
             'page' => ['sometimes', 'integer', 'min:1'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
+            'status' => ['sometimes', 'string', 'in:open,pending,closed'],
+            'requester_id' => ['sometimes', 'integer', 'min:1'],
+            'assignee_id' => ['sometimes', 'integer', 'min:1'],
+            'search' => ['sometimes', 'string', 'max:120'],
+            'sort_by' => ['sometimes', 'string', 'in:id,status,title,requester_id,assignee_id'],
+            'sort_dir' => ['sometimes', 'string', 'in:asc,desc'],
         ];
     }
 }
