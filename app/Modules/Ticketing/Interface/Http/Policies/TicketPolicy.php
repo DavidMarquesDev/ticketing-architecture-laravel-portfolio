@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Ticketing\Interface\Http\Policies;
 
+use App\Models\User;
 use Traversable;
 
 final class TicketPolicy
@@ -90,8 +91,30 @@ final class TicketPolicy
             return $this->normalizeRoles($user->getAttribute('roles'));
         }
 
+        if (method_exists($user, 'toArray')) {
+            $attributes = $user->toArray();
+
+            if (is_array($attributes)) {
+                return $this->normalizeRoles($attributes['roles'] ?? []);
+            }
+        }
+
         if (property_exists($user, 'roles')) {
             return $this->normalizeRoles($user->roles);
+        }
+
+        $userId = $this->extractUserId($user);
+
+        if ($userId > 0 && class_exists(User::class)) {
+            try {
+                $persistedUser = User::query()->find($userId);
+
+                if ($persistedUser !== null) {
+                    return $this->normalizeRoles($persistedUser->getAttribute('roles'));
+                }
+            } catch (\Throwable) {
+                return [];
+            }
         }
 
         return [];
@@ -102,6 +125,22 @@ final class TicketPolicy
      */
     private function normalizeRoles(mixed $roles): array
     {
+        if (is_string($roles)) {
+            $trimmed = trim($roles);
+
+            if ($trimmed === '') {
+                return [];
+            }
+
+            $decoded = json_decode($trimmed, true);
+
+            if (is_array($decoded)) {
+                return $this->normalizeRoles($decoded);
+            }
+
+            return [$trimmed];
+        }
+
         if (!is_array($roles) && !$roles instanceof Traversable) {
             return [];
         }

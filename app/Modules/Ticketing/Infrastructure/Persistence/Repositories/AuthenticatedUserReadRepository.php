@@ -5,6 +5,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Ticketing\Infrastructure\Persistence\Repositories;
 
+use App\Models\User;
 use App\Modules\Ticketing\Application\Ports\Out\UserReadRepositoryPort;
 use Traversable;
 
@@ -44,20 +45,49 @@ final class AuthenticatedUserReadRepository implements UserReadRepositoryPort
      */
     private function authenticatedUser(): object|array|null
     {
-        if (!function_exists('auth')) {
-            return null;
+        if (function_exists('request')) {
+            $request = request();
+
+            if (is_object($request) && method_exists($request, 'user')) {
+                /** @var mixed $requestUser */
+                $requestUser = $request->user();
+
+                if (is_object($requestUser) || is_array($requestUser)) {
+                    return $requestUser;
+                }
+            }
         }
 
-        $auth = call_user_func('auth');
+        if (function_exists('auth')) {
+            $sanctumAuth = call_user_func('auth', 'sanctum');
 
-        if (!is_object($auth) || !method_exists($auth, 'user')) {
-            return null;
+            if (is_object($sanctumAuth) && method_exists($sanctumAuth, 'user')) {
+                /** @var mixed $sanctumUser */
+                $sanctumUser = $sanctumAuth->user();
+
+                if (is_object($sanctumUser) || is_array($sanctumUser)) {
+                    return $sanctumUser;
+                }
+            }
+
+            $defaultAuth = call_user_func('auth');
+
+            if (is_object($defaultAuth) && method_exists($defaultAuth, 'user')) {
+                /** @var mixed $defaultUser */
+                $defaultUser = $defaultAuth->user();
+
+                if (is_object($defaultUser) || is_array($defaultUser)) {
+                    return $defaultUser;
+                }
+            }
         }
 
-        $user = $auth->user();
+        if (array_key_exists('ticketing_authenticated_user', $GLOBALS)) {
+            $fallbackUser = $GLOBALS['ticketing_authenticated_user'];
 
-        if (is_object($user) || is_array($user)) {
-            return $user;
+            if (is_object($fallbackUser) || is_array($fallbackUser)) {
+                return $fallbackUser;
+            }
         }
 
         return null;
@@ -105,8 +135,34 @@ final class AuthenticatedUserReadRepository implements UserReadRepositoryPort
             return $this->normalizeRoles($user->getRoleNames());
         }
 
+        if (method_exists($user, 'getAttribute')) {
+            return $this->normalizeRoles($user->getAttribute('roles'));
+        }
+
+        if (method_exists($user, 'toArray')) {
+            $attributes = $user->toArray();
+
+            if (is_array($attributes)) {
+                return $this->normalizeRoles($attributes['roles'] ?? []);
+            }
+        }
+
         if (property_exists($user, 'roles')) {
             return $this->normalizeRoles($user->roles);
+        }
+
+        $userId = $this->extractUserId($user);
+
+        if ($userId > 0 && class_exists(User::class)) {
+            try {
+                $persistedUser = User::query()->find($userId);
+
+                if ($persistedUser !== null) {
+                    return $this->normalizeRoles($persistedUser->getAttribute('roles'));
+                }
+            } catch (\Throwable) {
+                return [];
+            }
         }
 
         return [];
@@ -117,6 +173,22 @@ final class AuthenticatedUserReadRepository implements UserReadRepositoryPort
      */
     private function normalizeRoles(mixed $roles): array
     {
+        if (is_string($roles)) {
+            $trimmed = trim($roles);
+
+            if ($trimmed === '') {
+                return [];
+            }
+
+            $decoded = json_decode($trimmed, true);
+
+            if (is_array($decoded)) {
+                return $this->normalizeRoles($decoded);
+            }
+
+            return [$trimmed];
+        }
+
         if (!is_array($roles) && !$roles instanceof Traversable) {
             return [];
         }

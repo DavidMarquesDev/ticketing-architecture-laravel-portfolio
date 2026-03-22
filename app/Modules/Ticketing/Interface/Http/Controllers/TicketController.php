@@ -34,6 +34,7 @@ use App\Modules\Ticketing\Interface\Http\Resources\TicketCommentResource;
 use App\Modules\Ticketing\Interface\Http\Resources\TicketResource;
 use App\Modules\Ticketing\Infrastructure\Observability\StructuredLogger;
 use DomainException;
+use Illuminate\Http\JsonResponse;
 use RuntimeException;
 
 /**
@@ -74,9 +75,9 @@ final class TicketController
     }
 
     /**
-     * @return array<string, mixed>
+     * @return array<string, mixed>|JsonResponse
      */
-    public function store(StoreTicketRequest $request): array
+    public function store(StoreTicketRequest $request): array|JsonResponse
     {
         $authenticatedUser = $this->authenticatedUser($request);
         $traceId = $this->generateTraceId();
@@ -99,17 +100,15 @@ final class TicketController
             )
         );
 
-        http_response_code(201);
-
-        return [
+        return $this->responsePayload([
             'data' => (new TicketResource($ticket))->toArray($request),
-        ];
+        ], 201);
     }
 
     /**
-     * @return array<string, mixed>
+     * @return array<string, mixed>|JsonResponse
      */
-    public function index(ListTicketsRequest $request): array
+    public function index(ListTicketsRequest $request): array|JsonResponse
     {
         $authenticatedUser = $this->authenticatedUser($request);
 
@@ -133,19 +132,19 @@ final class TicketController
             )
         );
 
-        return [
+        return $this->responsePayload([
             'data' => array_map(
                 fn (Ticket $ticket): array => (new TicketResource($ticket))->toArray($request),
                 $tickets
             ),
             'meta' => $this->paginationMeta($page, $perPage, count($tickets)),
-        ];
+        ]);
     }
 
     /**
-     * @return array<string, mixed>
+     * @return array<string, mixed>|JsonResponse
      */
-    public function show(ShowTicketRequest $request, string $ticketId): array
+    public function show(ShowTicketRequest $request, string $ticketId): array|JsonResponse
     {
         $authenticatedUser = $this->authenticatedUser($request);
 
@@ -161,15 +160,15 @@ final class TicketController
             return $this->errorResponse('TICKET_NOT_FOUND', $exception->getMessage(), 404);
         }
 
-        return [
+        return $this->responsePayload([
             'data' => (new TicketResource($ticket))->toArray($request),
-        ];
+        ]);
     }
 
     /**
-     * @return array<string, mixed>
+     * @return array<string, mixed>|JsonResponse
      */
-    public function assign(AssignTicketRequest $request, string $ticketId): array
+    public function assign(AssignTicketRequest $request, string $ticketId): array|JsonResponse
     {
         $authenticatedUser = $this->authenticatedUser($request);
         $traceId = $this->generateTraceId();
@@ -200,15 +199,15 @@ final class TicketController
             return $this->errorResponse('TICKET_CONFLICT', $exception->getMessage(), 409, $traceId);
         }
 
-        return [
+        return $this->responsePayload([
             'data' => (new TicketResource($ticket))->toArray($request),
-        ];
+        ]);
     }
 
     /**
-     * @return array<string, mixed>
+     * @return array<string, mixed>|JsonResponse
      */
-    public function close(CloseTicketRequest $request, string $ticketId): array
+    public function close(CloseTicketRequest $request, string $ticketId): array|JsonResponse
     {
         $authenticatedUser = $this->authenticatedUser($request);
         $traceId = $this->generateTraceId();
@@ -237,15 +236,15 @@ final class TicketController
             return $this->errorResponse('TICKET_CONFLICT', $exception->getMessage(), 409, $traceId);
         }
 
-        return [
+        return $this->responsePayload([
             'data' => (new TicketResource($ticket))->toArray($request),
-        ];
+        ]);
     }
 
     /**
-     * @return array<string, mixed>
+     * @return array<string, mixed>|JsonResponse
      */
-    public function reply(ReplyTicketRequest $request, string $ticketId): array
+    public function reply(ReplyTicketRequest $request, string $ticketId): array|JsonResponse
     {
         $authenticatedUser = $this->authenticatedUser($request);
         $traceId = $this->generateTraceId();
@@ -277,17 +276,15 @@ final class TicketController
             return $this->errorResponse('TICKET_CONFLICT', $exception->getMessage(), 409, $traceId);
         }
 
-        http_response_code(201);
-
-        return [
+        return $this->responsePayload([
             'data' => (new TicketCommentResource($comment))->toArray($request),
-        ];
+        ], 201);
     }
 
     /**
-     * @return array<string, mixed>
+     * @return array<string, mixed>|JsonResponse
      */
-    public function comments(ListTicketCommentsRequest $request, string $ticketId): array
+    public function comments(ListTicketCommentsRequest $request, string $ticketId): array|JsonResponse
     {
         $authenticatedUser = $this->authenticatedUser($request);
 
@@ -311,32 +308,46 @@ final class TicketController
             return $this->errorResponse('TICKET_NOT_FOUND', $exception->getMessage(), 404);
         }
 
-        return [
+        return $this->responsePayload([
             'data' => array_map(
                 fn (TicketComment $comment): array => (new TicketCommentResource($comment))->toArray($request),
                 $comments
             ),
             'meta' => $this->paginationMeta($page, $perPage, count($comments)),
-        ];
+        ]);
     }
 
     /**
-     * @return array{error: array{code: string, message: string, details: array<int, mixed>, trace_id: string}}
+     * @return array<string, mixed>|JsonResponse
      */
-    private function errorResponse(string $code, string $message, int $status, ?string $traceId = null): array
+    private function errorResponse(string $code, string $message, int $status, ?string $traceId = null): array|JsonResponse
     {
         $traceId = $traceId ?? $this->generateTraceId();
-        http_response_code($status);
         $this->logError($code, $message, $status, $traceId);
 
-        return [
+        return $this->responsePayload([
             'error' => [
                 'code' => $code,
                 'message' => $message,
                 'details' => [],
                 'trace_id' => $traceId,
             ],
-        ];
+        ], $status);
+    }
+
+    /**
+     * @param array<string, mixed> $payload
+     * @return array<string, mixed>|JsonResponse
+     */
+    private function responsePayload(array $payload, int $status = 200): array|JsonResponse
+    {
+        if (function_exists('response') && class_exists(JsonResponse::class)) {
+            return response()->json($payload, $status);
+        }
+
+        http_response_code($status);
+
+        return $payload;
     }
 
     private function nullableString(mixed $value): ?string
@@ -411,6 +422,11 @@ final class TicketController
         }
 
         $policyAuthorization = $this->authorizeUsingPolicy($user, $ability);
+
+        if ($policyAuthorization) {
+            return true;
+        }
+
         $gateFacade = '\Illuminate\Support\Facades\Gate';
 
         if (!class_exists($gateFacade)) {
