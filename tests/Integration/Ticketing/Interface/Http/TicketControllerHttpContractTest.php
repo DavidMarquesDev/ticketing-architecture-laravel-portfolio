@@ -344,7 +344,7 @@ namespace {
 
             assertSame(403, (int) ($GLOBALS['ticketing_http_status_code'] ?? 200), 'Assign deve responder 403 sem permissão.');
             assertSame('FORBIDDEN', $response['error']['code'], 'Assign deve retornar código FORBIDDEN.');
-            assertSame(true, $GLOBALS['assign_handler_called'], 'Assign deve mapear retorno de autorização do command handler.');
+            assertSame(false, $GLOBALS['assign_handler_called'], 'Assign não deve executar command handler quando policy negar acesso.');
         },
         'ticket_controller_close_maps_conflict_to_409' => static function (): void {
             resetHttpContext();
@@ -401,10 +401,11 @@ namespace {
 
             assertSame(403, (int) ($GLOBALS['ticketing_http_status_code'] ?? 200), 'Close deve responder 403 sem permissão.');
             assertSame('FORBIDDEN', $response['error']['code'], 'Close deve retornar código FORBIDDEN.');
-            assertSame(true, $GLOBALS['close_handler_called'], 'Close deve mapear retorno de autorização do command handler.');
+            assertSame(false, $GLOBALS['close_handler_called'], 'Close não deve executar command handler quando policy negar acesso.');
         },
         'ticket_controller_reply_returns_201_and_comment_contract' => static function (): void {
             resetHttpContext();
+            $GLOBALS['ticketing_authenticated_user'] = ['id' => 99, 'roles' => ['customer']];
             $GLOBALS['ticketing_http_payload'] = json_encode([
                 'author_id' => 99,
                 'message' => 'Aplicada correção.',

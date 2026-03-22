@@ -176,15 +176,19 @@ final class TicketingServiceProvider
     {
         $gateFacade = '\Illuminate\Support\Facades\Gate';
 
-        if (!class_exists($gateFacade) || !method_exists($gateFacade, 'define')) {
+        if (!class_exists($gateFacade)) {
             return;
         }
 
         $policy = new TicketPolicy();
 
-        $gateFacade::define('ticket.assign', static fn (mixed $user): bool => $policy->assign($user));
-        $gateFacade::define('ticket.close', static fn (mixed $user): bool => $policy->close($user));
-        $gateFacade::define('ticket.reply', static fn (mixed $user): bool => $policy->reply($user));
+        try {
+            $gateFacade::define('ticket.assign', static fn (mixed $user): bool => $policy->assign($user));
+            $gateFacade::define('ticket.close', static fn (mixed $user): bool => $policy->close($user));
+            $gateFacade::define('ticket.reply', static fn (mixed $user): bool => $policy->reply($user));
+        } catch (\Throwable) {
+            return;
+        }
     }
 
     private function registerRateLimiter(): void

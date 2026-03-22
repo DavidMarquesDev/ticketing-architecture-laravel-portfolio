@@ -86,6 +86,10 @@ final class TicketPolicy
             return $this->normalizeRoles($user->getRoleNames());
         }
 
+        if (method_exists($user, 'getAttribute')) {
+            return $this->normalizeRoles($user->getAttribute('roles'));
+        }
+
         if (property_exists($user, 'roles')) {
             return $this->normalizeRoles($user->roles);
         }

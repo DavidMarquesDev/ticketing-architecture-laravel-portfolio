@@ -29,6 +29,7 @@ use App\Modules\Ticketing\Interface\Http\Requests\ListTicketsRequest;
 use App\Modules\Ticketing\Interface\Http\Requests\ReplyTicketRequest;
 use App\Modules\Ticketing\Interface\Http\Requests\ShowTicketRequest;
 use App\Modules\Ticketing\Interface\Http\Requests\StoreTicketRequest;
+use App\Modules\Ticketing\Interface\Http\Policies\TicketPolicy;
 use App\Modules\Ticketing\Interface\Http\Resources\TicketCommentResource;
 use App\Modules\Ticketing\Interface\Http\Resources\TicketResource;
 use App\Modules\Ticketing\Infrastructure\Observability\StructuredLogger;
@@ -403,25 +404,45 @@ final class TicketController
 
     private function authorizeAbility(object $request, string $ability): bool
     {
-        $gateFacade = '\Illuminate\Support\Facades\Gate';
-
-        if (!class_exists($gateFacade) || !method_exists($gateFacade, 'forUser')) {
-            return true;
-        }
-
         $user = $this->requestUserObject($request);
 
         if ($user === null) {
             return false;
         }
 
-        $gate = $gateFacade::forUser($user);
+        $policyAuthorization = $this->authorizeUsingPolicy($user, $ability);
+        $gateFacade = '\Illuminate\Support\Facades\Gate';
+
+        if (!class_exists($gateFacade)) {
+            return $policyAuthorization;
+        }
+
+        try {
+            $gate = $gateFacade::forUser($user);
+        } catch (\Throwable) {
+            return $policyAuthorization;
+        }
 
         if (!is_object($gate) || !method_exists($gate, 'allows')) {
-            return true;
+            return $policyAuthorization;
         }
 
         return (bool) $gate->allows($ability);
+    }
+
+    /**
+     * @param object|array<string, mixed> $user
+     */
+    private function authorizeUsingPolicy(object|array $user, string $ability): bool
+    {
+        $policy = new TicketPolicy();
+
+        return match ($ability) {
+            'ticket.assign' => $policy->assign($user),
+            'ticket.close' => $policy->close($user),
+            'ticket.reply' => $policy->reply($user),
+            default => true,
+        };
     }
 
     /**

@@ -52,6 +52,7 @@ final class AuthController
      */
     public function login(LoginRequest $request): array
     {
+        $traceId = bin2hex(random_bytes(8));
         $payload = method_exists($request, 'validated') ? $request->validated() : [];
 
         try {
@@ -69,6 +70,7 @@ final class AuthController
                     'code' => 'UNAUTHENTICATED',
                     'message' => $exception->getMessage(),
                     'details' => [],
+                    'trace_id' => $traceId,
                 ],
             ];
         }
