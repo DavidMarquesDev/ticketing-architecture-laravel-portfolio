@@ -24,6 +24,8 @@ use App\Modules\Ticketing\Application\Ports\In\ListTicketsQueryHandler as ListTi
 use App\Modules\Ticketing\Application\Ports\In\ListTicketsUseCase;
 use App\Modules\Ticketing\Application\Ports\In\ReplyTicketCommandHandler;
 use App\Modules\Ticketing\Application\Ports\In\ReplyTicketUseCase;
+use App\Modules\Ticketing\Application\Ports\In\RegisterUserUseCase;
+use App\Modules\Ticketing\Application\Ports\In\UpdateUserRolesUseCase;
 use App\Modules\Ticketing\Application\QueryHandlers\GetTicketDetailsQueryHandler as GetTicketDetailsQueryHandlerService;
 use App\Modules\Ticketing\Application\QueryHandlers\ListTicketCommentsQueryHandler as ListTicketCommentsQueryHandlerService;
 use App\Modules\Ticketing\Application\QueryHandlers\ListTicketsQueryHandler as ListTicketsQueryHandlerService;
@@ -39,6 +41,8 @@ use App\Modules\Ticketing\Application\Ports\Out\TicketListCachePort;
 use App\Modules\Ticketing\Application\Ports\Out\TicketRepositoryPort;
 use App\Modules\Ticketing\Application\Ports\Out\UserAuthenticationRepositoryPort;
 use App\Modules\Ticketing\Application\Ports\Out\UserReadRepositoryPort;
+use App\Modules\Ticketing\Application\Ports\Out\UserRegistrationRepositoryPort;
+use App\Modules\Ticketing\Application\Ports\Out\UserRoleManagementRepositoryPort;
 use App\Modules\Ticketing\Application\Ports\Out\UserTokenIssuerPort;
 use App\Modules\Ticketing\Application\CommandHandlers\AssignTicketCommandHandler as AssignTicketCommandHandlerService;
 use App\Modules\Ticketing\Application\CommandHandlers\CloseTicketCommandHandler as CloseTicketCommandHandlerService;
@@ -50,6 +54,8 @@ use App\Modules\Ticketing\Application\UseCases\CloseTicketService;
 use App\Modules\Ticketing\Application\UseCases\CreateTicketService;
 use App\Modules\Ticketing\Application\UseCases\ListTicketsService;
 use App\Modules\Ticketing\Application\UseCases\ReplyTicketService;
+use App\Modules\Ticketing\Application\UseCases\RegisterUserService;
+use App\Modules\Ticketing\Application\UseCases\UpdateUserRolesService;
 use App\Modules\Ticketing\Domain\Events\TicketClosed;
 use App\Modules\Ticketing\Domain\Events\TicketCreated;
 use App\Modules\Ticketing\Domain\Events\TicketReplied;
@@ -66,6 +72,8 @@ use App\Modules\Ticketing\Infrastructure\Persistence\Repositories\AuthenticatedU
 use App\Modules\Ticketing\Infrastructure\Persistence\Repositories\EloquentTicketCommentRepository;
 use App\Modules\Ticketing\Infrastructure\Persistence\Repositories\EloquentTicketRepository;
 use App\Modules\Ticketing\Infrastructure\Persistence\Repositories\EloquentUserAuthenticationRepository;
+use App\Modules\Ticketing\Infrastructure\Persistence\Repositories\EloquentUserRegistrationRepository;
+use App\Modules\Ticketing\Infrastructure\Persistence\Repositories\EloquentUserRoleManagementRepository;
 use App\Modules\Ticketing\Infrastructure\Persistence\Repositories\InMemoryTicketCommentRepository;
 use App\Modules\Ticketing\Infrastructure\Persistence\Repositories\InMemoryTicketRepository;
 use App\Modules\Ticketing\Infrastructure\Queue\QueueIntegrationEventPublisher;
@@ -74,15 +82,30 @@ use App\Modules\Ticketing\Infrastructure\Queue\RedisQueueDispatcher;
 /**
  * Provider para bindings iniciais do módulo Ticketing.
  *
+ * Configura contratos de aplicação, repositórios, políticas,
+ * listeners de domínio e rate limit por endpoint.
+ *
  * @author David Marques
  */
 final class TicketingServiceProvider
 {
+    /**
+     * @param object|null $containerOverride Container opcional para cenários de teste.
+     *
+     * @author David Marques
+     */
     public function __construct(
         private readonly ?object $containerOverride = null
     ) {
     }
 
+    /**
+     * Registra bindings de dependência do módulo.
+     *
+     * @return void
+     *
+     * @author David Marques
+     */
     public function register(): void
     {
         $container = $this->container();
@@ -102,6 +125,8 @@ final class TicketingServiceProvider
             );
             $container->singleton(UserReadRepositoryPort::class, AuthenticatedUserReadRepository::class);
             $container->singleton(UserAuthenticationRepositoryPort::class, EloquentUserAuthenticationRepository::class);
+            $container->singleton(UserRegistrationRepositoryPort::class, EloquentUserRegistrationRepository::class);
+            $container->singleton(UserRoleManagementRepositoryPort::class, EloquentUserRoleManagementRepository::class);
             $container->singleton(UserTokenIssuerPort::class, SanctumUserTokenIssuer::class);
         }
 
@@ -129,10 +154,19 @@ final class TicketingServiceProvider
             $container->bind(ReplyTicketUseCase::class, ReplyTicketService::class);
             $container->bind(ReplyTicketCommandHandler::class, ReplyTicketCommandHandlerService::class);
             $container->bind(AuthenticateUserUseCase::class, AuthenticateUserService::class);
+            $container->bind(RegisterUserUseCase::class, RegisterUserService::class);
+            $container->bind(UpdateUserRolesUseCase::class, UpdateUserRolesService::class);
         }
 
     }
 
+    /**
+     * Inicializa listeners, autorização e rate limiting do módulo.
+     *
+     * @return void
+     *
+     * @author David Marques
+     */
     public function boot(): void
     {
         $container = $this->container();
@@ -154,6 +188,13 @@ final class TicketingServiceProvider
         $this->registerRateLimiter();
     }
 
+    /**
+     * Resolve container da aplicação com suporte a override.
+     *
+     * @return object|null
+     *
+     * @author David Marques
+     */
     private function container(): ?object
     {
         if ($this->containerOverride !== null) {
@@ -167,11 +208,25 @@ final class TicketingServiceProvider
         return call_user_func('app');
     }
 
+    /**
+     * Verifica disponibilidade de Eloquent no runtime atual.
+     *
+     * @return bool
+     *
+     * @author David Marques
+     */
     private function supportsEloquent(): bool
     {
         return class_exists('Illuminate\Database\Eloquent\Model');
     }
 
+    /**
+     * Registra abilities de ticket no Gate.
+     *
+     * @return void
+     *
+     * @author David Marques
+     */
     private function registerAuthorization(): void
     {
         $gateFacade = '\Illuminate\Support\Facades\Gate';
@@ -186,11 +241,22 @@ final class TicketingServiceProvider
             $gateFacade::define('ticket.assign', static fn (mixed $user): bool => $policy->assign($user));
             $gateFacade::define('ticket.close', static fn (mixed $user): bool => $policy->close($user));
             $gateFacade::define('ticket.reply', static fn (mixed $user): bool => $policy->reply($user));
+            $gateFacade::define(
+                'user.roles.update',
+                static fn (mixed $user): bool => (bool) call_user_func([$policy, 'manageUsers'], $user)
+            );
         } catch (\Throwable) {
             return;
         }
     }
 
+    /**
+     * Configura rate limit segmentado por endpoint e método HTTP.
+     *
+     * @return void
+     *
+     * @author David Marques
+     */
     private function registerRateLimiter(): void
     {
         $rateLimiter = '\Illuminate\Support\Facades\RateLimiter';
@@ -343,6 +409,15 @@ final class TicketingServiceProvider
         );
     }
 
+    /**
+     * Resolve limite por minuto a partir de variável de ambiente.
+     *
+     * @param string $envKey Chave da variável de ambiente.
+     * @param int $default Valor padrão.
+     * @return int
+     *
+     * @author David Marques
+     */
     private function resolveRateLimit(string $envKey, int $default): int
     {
         $value = getenv($envKey);
@@ -366,6 +441,15 @@ final class TicketingServiceProvider
         return $resolved > 0 ? $resolved : $default;
     }
 
+    /**
+     * Resolve janela de rate limit em segundos com limites mínimos e máximos.
+     *
+     * @param string $envKey Chave da variável de ambiente.
+     * @param int $default Valor padrão.
+     * @return int
+     *
+     * @author David Marques
+     */
     private function resolveRateWindow(string $envKey, int $default): int
     {
         $value = getenv($envKey);
@@ -397,6 +481,20 @@ final class TicketingServiceProvider
         return $resolved;
     }
 
+    /**
+     * Registra telemetria estruturada de bucket de rate limit.
+     *
+     * @param object $request Requisição HTTP atual.
+     * @param string $endpointBucket Bucket lógico do endpoint.
+     * @param int $limitPerMinute Limite aplicado por minuto.
+     * @param int $windowSeconds Janela do limite em segundos.
+     * @param int $resolvedUserId Identificador do usuário resolvido.
+     * @param string $ip Endereço IP da requisição.
+     * @param string $key Chave efetiva de throttle.
+     * @return void
+     *
+     * @author David Marques
+     */
     private static function logRateLimitTelemetry(
         object $request,
         string $endpointBucket,
@@ -423,6 +521,15 @@ final class TicketingServiceProvider
         );
     }
 
+    /**
+     * Extrai valor de header da requisição por múltiplas estratégias.
+     *
+     * @param object $request Requisição HTTP atual.
+     * @param string $headerName Nome do header.
+     * @return string|null
+     *
+     * @author David Marques
+     */
     private static function extractRequestHeader(object $request, string $headerName): ?string
     {
         if (method_exists($request, 'header')) {

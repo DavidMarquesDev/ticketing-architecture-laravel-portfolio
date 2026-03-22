@@ -25,6 +25,11 @@ final class TicketPolicy
         return $this->extractUserId($user) > 0;
     }
 
+    public function manageUsers(mixed $user): bool
+    {
+        return $this->hasAnyRole($user, ['admin']);
+    }
+
     /**
      * @param array<int, string> $allowedRoles
      */

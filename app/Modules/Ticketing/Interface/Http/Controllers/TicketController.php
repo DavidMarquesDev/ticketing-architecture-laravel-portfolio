@@ -59,10 +59,25 @@ use RuntimeException;
  *   }
  * }
  *
+ * @tags Tickets
+ *
  * @author David Marques
  */
 final class TicketController
 {
+    /**
+     * Construtor do controller de tickets.
+     *
+     * @param CreateTicketCommandHandler $createTicketCommandHandler Handler para criação de ticket.
+     * @param ListTicketsQueryHandler $listTicketsQueryHandler Handler para listagem paginada de tickets.
+     * @param GetTicketDetailsQueryHandler $getTicketDetailsQueryHandler Handler para detalhamento de ticket.
+     * @param ListTicketCommentsQueryHandler $listTicketCommentsQueryHandler Handler para listagem de comentários.
+     * @param AssignTicketCommandHandler $assignTicketCommandHandler Handler para atribuição de ticket.
+     * @param CloseTicketCommandHandler $closeTicketCommandHandler Handler para fechamento de ticket.
+     * @param ReplyTicketCommandHandler $replyTicketCommandHandler Handler para resposta de ticket.
+     *
+     * @author David Marques
+     */
     public function __construct(
         private readonly CreateTicketCommandHandler $createTicketCommandHandler,
         private readonly ListTicketsQueryHandler $listTicketsQueryHandler,
@@ -75,7 +90,36 @@ final class TicketController
     }
 
     /**
+     * Cria um novo ticket para o usuário autenticado.
+     *
+     * ## 🔐 Regras de Acesso
+     * - ✅ Requer autenticação via `Sanctum`.
+     *
+     * ## 📋 Estrutura da Resposta
+     * - `data` com os dados do ticket criado.
+     *
+     * @param StoreTicketRequest $request Requisição validada com título e descrição.
      * @return array<string, mixed>|JsonResponse
+     *
+     * @example Request
+     * POST /api/tickets
+     * {
+     *   "title": "Falha no checkout",
+     *   "description": "Erro 500 ao finalizar pagamento"
+     * }
+     *
+     * @example Response 201
+     * {
+     *   "data": {
+     *     "id": "f3b8d3a0c5f34ebf8ea6f5de84dd7f2d",
+     *     "requester_id": 10,
+     *     "title": "Falha no checkout",
+     *     "description": "Erro 500 ao finalizar pagamento",
+     *     "status": "open"
+     *   }
+     * }
+     *
+     * @author David Marques
      */
     public function store(StoreTicketRequest $request): array|JsonResponse
     {
@@ -106,7 +150,33 @@ final class TicketController
     }
 
     /**
+     * Lista tickets com paginação e filtros opcionais.
+     *
+     * ## 🔐 Regras de Acesso
+     * - ✅ Requer autenticação via `Sanctum`.
+     *
+     * ## 📋 Estrutura da Resposta
+     * - `data` com coleção de tickets.
+     * - `meta` com paginação (`page`, `per_page`, `count`, `has_more`).
+     *
+     * @param ListTicketsRequest $request Requisição com filtros e paginação.
      * @return array<string, mixed>|JsonResponse
+     *
+     * @example Request
+     * GET /api/tickets?page=1&per_page=15&status=open&sort_by=id&sort_dir=desc
+     *
+     * @example Response 200
+     * {
+     *   "data": [],
+     *   "meta": {
+     *     "page": 1,
+     *     "per_page": 15,
+     *     "count": 0,
+     *     "has_more": false
+     *   }
+     * }
+     *
+     * @author David Marques
      */
     public function index(ListTicketsRequest $request): array|JsonResponse
     {
@@ -142,7 +212,40 @@ final class TicketController
     }
 
     /**
+     * Retorna detalhes de um ticket pelo identificador.
+     *
+     * ## 🔐 Regras de Acesso
+     * - ✅ Requer autenticação via `Sanctum`.
+     *
+     * ## 📋 Estrutura da Resposta
+     * - `data` em sucesso.
+     * - `error` com código `TICKET_NOT_FOUND` quando não encontrado.
+     *
+     * @param ShowTicketRequest $request Requisição autenticada.
+     * @param string $ticketId Identificador do ticket.
      * @return array<string, mixed>|JsonResponse
+     *
+     * @example Request
+     * GET /api/tickets/{ticketId}
+     *
+     * @example Response 200
+     * {
+     *   "data": {
+     *     "id": "f3b8d3a0c5f34ebf8ea6f5de84dd7f2d"
+     *   }
+     * }
+     *
+     * @example Response 404
+     * {
+     *   "error": {
+     *     "code": "TICKET_NOT_FOUND",
+     *     "message": "Ticket não encontrado.",
+     *     "details": [],
+     *     "trace_id": "abc123def4567890"
+     *   }
+     * }
+     *
+     * @author David Marques
      */
     public function show(ShowTicketRequest $request, string $ticketId): array|JsonResponse
     {
@@ -166,7 +269,34 @@ final class TicketController
     }
 
     /**
+     * Atribui um ticket para um responsável.
+     *
+     * ## 🔐 Regras de Acesso
+     * - ✅ Requer autenticação via `Sanctum`.
+     * - ✅ Requer permissão `ticket.assign`.
+     *
+     * ## 📋 Estrutura da Resposta
+     * - `data` em sucesso.
+     * - `error` com códigos `FORBIDDEN`, `TICKET_NOT_FOUND` ou `TICKET_CONFLICT`.
+     *
+     * @param AssignTicketRequest $request Requisição com assignee_id.
+     * @param string $ticketId Identificador do ticket.
      * @return array<string, mixed>|JsonResponse
+     *
+     * @example Request
+     * PATCH /api/tickets/{ticketId}/assign
+     * {
+     *   "assignee_id": 20
+     * }
+     *
+     * @example Response 200
+     * {
+     *   "data": {
+     *     "id": "f3b8d3a0c5f34ebf8ea6f5de84dd7f2d"
+     *   }
+     * }
+     *
+     * @author David Marques
      */
     public function assign(AssignTicketRequest $request, string $ticketId): array|JsonResponse
     {
@@ -205,7 +335,32 @@ final class TicketController
     }
 
     /**
+     * Fecha um ticket em aberto.
+     *
+     * ## 🔐 Regras de Acesso
+     * - ✅ Requer autenticação via `Sanctum`.
+     * - ✅ Requer permissão `ticket.close`.
+     *
+     * ## 📋 Estrutura da Resposta
+     * - `data` em sucesso.
+     * - `error` com códigos de domínio em falha.
+     *
+     * @param CloseTicketRequest $request Requisição autenticada.
+     * @param string $ticketId Identificador do ticket.
      * @return array<string, mixed>|JsonResponse
+     *
+     * @example Request
+     * PATCH /api/tickets/{ticketId}/close
+     *
+     * @example Response 200
+     * {
+     *   "data": {
+     *     "id": "f3b8d3a0c5f34ebf8ea6f5de84dd7f2d",
+     *     "status": "closed"
+     *   }
+     * }
+     *
+     * @author David Marques
      */
     public function close(CloseTicketRequest $request, string $ticketId): array|JsonResponse
     {
@@ -242,7 +397,35 @@ final class TicketController
     }
 
     /**
+     * Adiciona uma resposta ao ticket.
+     *
+     * ## 🔐 Regras de Acesso
+     * - ✅ Requer autenticação via `Sanctum`.
+     * - ✅ Requer permissão `ticket.reply`.
+     *
+     * ## 📋 Estrutura da Resposta
+     * - `data` com comentário criado.
+     * - `error` com códigos `TICKET_NOT_FOUND` ou `TICKET_CONFLICT`.
+     *
+     * @param ReplyTicketRequest $request Requisição com mensagem de resposta.
+     * @param string $ticketId Identificador do ticket.
      * @return array<string, mixed>|JsonResponse
+     *
+     * @example Request
+     * POST /api/tickets/{ticketId}/reply
+     * {
+     *   "message": "Conseguimos reproduzir o problema e estamos atuando."
+     * }
+     *
+     * @example Response 201
+     * {
+     *   "data": {
+     *     "ticket_id": "f3b8d3a0c5f34ebf8ea6f5de84dd7f2d",
+     *     "message": "Conseguimos reproduzir o problema e estamos atuando."
+     *   }
+     * }
+     *
+     * @author David Marques
      */
     public function reply(ReplyTicketRequest $request, string $ticketId): array|JsonResponse
     {
@@ -282,7 +465,34 @@ final class TicketController
     }
 
     /**
+     * Lista comentários de um ticket com paginação.
+     *
+     * ## 🔐 Regras de Acesso
+     * - ✅ Requer autenticação via `Sanctum`.
+     *
+     * ## 📋 Estrutura da Resposta
+     * - `data` com comentários.
+     * - `meta` com dados de paginação.
+     *
+     * @param ListTicketCommentsRequest $request Requisição com parâmetros de paginação.
+     * @param string $ticketId Identificador do ticket.
      * @return array<string, mixed>|JsonResponse
+     *
+     * @example Request
+     * GET /api/tickets/{ticketId}/comments?page=1&per_page=15
+     *
+     * @example Response 200
+     * {
+     *   "data": [],
+     *   "meta": {
+     *     "page": 1,
+     *     "per_page": 15,
+     *     "count": 0,
+     *     "has_more": false
+     *   }
+     * }
+     *
+     * @author David Marques
      */
     public function comments(ListTicketCommentsRequest $request, string $ticketId): array|JsonResponse
     {
@@ -318,7 +528,15 @@ final class TicketController
     }
 
     /**
+     * Retorna payload padronizado de erro da API.
+     *
+     * @param string $code Código de erro interno.
+     * @param string $message Mensagem para consumo do frontend.
+     * @param int $status Status HTTP.
+     * @param string|null $traceId Identificador de rastreio da requisição.
      * @return array<string, mixed>|JsonResponse
+     *
+     * @author David Marques
      */
     private function errorResponse(string $code, string $message, int $status, ?string $traceId = null): array|JsonResponse
     {
@@ -336,8 +554,13 @@ final class TicketController
     }
 
     /**
+     * Normaliza retorno para array em testes e JsonResponse em runtime.
+     *
      * @param array<string, mixed> $payload
+     * @param int $status Código HTTP da resposta.
      * @return array<string, mixed>|JsonResponse
+     *
+     * @author David Marques
      */
     private function responsePayload(array $payload, int $status = 200): array|JsonResponse
     {
@@ -350,6 +573,14 @@ final class TicketController
         return $payload;
     }
 
+    /**
+     * Converte valor escalar para string normalizada opcional.
+     *
+     * @param mixed $value Valor bruto recebido nos filtros da query.
+     * @return string|null
+     *
+     * @author David Marques
+     */
     private function nullableString(mixed $value): ?string
     {
         if (!is_string($value)) {
@@ -361,6 +592,14 @@ final class TicketController
         return $trimmed === '' ? null : $trimmed;
     }
 
+    /**
+     * Converte valor escalar para inteiro positivo opcional.
+     *
+     * @param mixed $value Valor bruto recebido nos filtros da query.
+     * @return int|null
+     *
+     * @author David Marques
+     */
     private function nullableInt(mixed $value): ?int
     {
         if (!is_numeric($value)) {
@@ -372,6 +611,14 @@ final class TicketController
         return $integer > 0 ? $integer : null;
     }
 
+    /**
+     * Normaliza campo de ordenação para lista permitida.
+     *
+     * @param mixed $value Campo solicitado para ordenação.
+     * @return string
+     *
+     * @author David Marques
+     */
     private function sortableField(mixed $value): string
     {
         if (!is_string($value)) {
@@ -384,6 +631,14 @@ final class TicketController
         return in_array($normalized, $allowed, true) ? $normalized : 'id';
     }
 
+    /**
+     * Normaliza direção de ordenação para valores válidos.
+     *
+     * @param mixed $value Direção solicitada.
+     * @return string
+     *
+     * @author David Marques
+     */
     private function sortableDirection(mixed $value): string
     {
         if (!is_string($value)) {
@@ -395,11 +650,29 @@ final class TicketController
         return in_array($normalized, ['asc', 'desc'], true) ? $normalized : 'desc';
     }
 
+    /**
+     * Gera identificador hexadecimal para rastreio de erros.
+     *
+     * @return string
+     *
+     * @author David Marques
+     */
     private function generateTraceId(): string
     {
         return bin2hex(random_bytes(8));
     }
 
+    /**
+     * Registra erro HTTP estruturado para observabilidade.
+     *
+     * @param string $code Código interno do erro.
+     * @param string $message Mensagem de erro.
+     * @param int $status Status HTTP correspondente.
+     * @param string $traceId Identificador de rastreio.
+     * @return void
+     *
+     * @author David Marques
+     */
     private function logError(string $code, string $message, int $status, string $traceId): void
     {
         StructuredLogger::log(
@@ -413,6 +686,15 @@ final class TicketController
         );
     }
 
+    /**
+     * Verifica autorização por policy e fallback para Gate.
+     *
+     * @param object $request Requisição atual.
+     * @param string $ability Habilidade a ser validada.
+     * @return bool
+     *
+     * @author David Marques
+     */
     private function authorizeAbility(object $request, string $ability): bool
     {
         $user = $this->requestUserObject($request);
@@ -447,7 +729,13 @@ final class TicketController
     }
 
     /**
+     * Resolve autorização via TicketPolicy para habilidade informada.
+     *
      * @param object|array<string, mixed> $user
+     * @param string $ability Habilidade alvo.
+     * @return bool
+     *
+     * @author David Marques
      */
     private function authorizeUsingPolicy(object|array $user, string $ability): bool
     {
@@ -462,7 +750,12 @@ final class TicketController
     }
 
     /**
+     * Obtém usuário autenticado em formato objeto ou array.
+     *
+     * @param object $request Requisição atual.
      * @return object|array<string, mixed>|null
+     *
+     * @author David Marques
      */
     private function requestUserObject(object $request): object|array|null
     {
@@ -480,7 +773,14 @@ final class TicketController
     }
 
     /**
+     * Monta metadados de paginação para respostas de listagem.
+     *
+     * @param int $page Página atual solicitada.
+     * @param int $perPage Quantidade por página.
+     * @param int $count Quantidade de itens retornados.
      * @return array{page: int, per_page: int, count: int, has_more: bool}
+     *
+     * @author David Marques
      */
     private function paginationMeta(int $page, int $perPage, int $count): array
     {
@@ -493,7 +793,12 @@ final class TicketController
     }
 
     /**
+     * Extrai payload validado da requisição com fallback para body bruto.
+     *
+     * @param object $request Requisição HTTP atual.
      * @return array<string, mixed>
+     *
+     * @author David Marques
      */
     private function requestPayload(object $request): array
     {
@@ -517,7 +822,12 @@ final class TicketController
     }
 
     /**
+     * Extrai parâmetros de query string com fallback para $_GET.
+     *
+     * @param object $request Requisição HTTP atual.
      * @return array<string, mixed>
+     *
+     * @author David Marques
      */
     private function queryParams(object $request): array
     {
@@ -533,7 +843,11 @@ final class TicketController
     }
 
     /**
+     * Lê e decodifica JSON bruto do input stream.
+     *
      * @return array<string, mixed>
+     *
+     * @author David Marques
      */
     private function payloadFromInputStream(): array
     {
@@ -549,7 +863,12 @@ final class TicketController
     }
 
     /**
+     * Resolve usuário autenticado para estrutura mínima de identificação.
+     *
+     * @param object $request Requisição HTTP atual.
      * @return array{id: int}|null
+     *
+     * @author David Marques
      */
     private function authenticatedUser(object $request): ?array
     {
@@ -574,6 +893,14 @@ final class TicketController
         ];
     }
 
+    /**
+     * Extrai identificador do usuário autenticado.
+     *
+     * @param object $user Entidade de usuário autenticado.
+     * @return int
+     *
+     * @author David Marques
+     */
     private function extractUserId(object $user): int
     {
         if (method_exists($user, 'getAuthIdentifier')) {
@@ -592,7 +919,11 @@ final class TicketController
     }
 
     /**
+     * Obtém usuário autenticado de fallback para execução sem framework completo.
+     *
      * @return array{id: int}|null
+     *
+     * @author David Marques
      */
     private function fallbackAuthenticatedUser(): ?array
     {
