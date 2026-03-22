@@ -91,6 +91,70 @@ $tests = [
         assertSame(TicketReplied::class, $container->events->listeners[2][0] ?? null, 'Terceiro listener deve ser de TicketReplied.');
         assertSame(TicketAssigned::class, $container->events->listeners[3][0] ?? null, 'Quarto listener deve ser de TicketAssigned.');
     },
+    'ticketing_service_provider_resolve_rate_limit_uses_env_and_default' => static function (): void {
+        putenv('TICKETING_RATE_LIMIT_TEST=77');
+        unset($_ENV['TICKETING_RATE_LIMIT_TEST']);
+
+        $provider = new TicketingServiceProvider();
+        $fromEnv = callPrivateMethod($provider, 'resolveRateLimit', ['TICKETING_RATE_LIMIT_TEST', 20]);
+        assertSame(77, $fromEnv, 'Provider deve usar valor numérico do ambiente.');
+
+        putenv('TICKETING_RATE_LIMIT_TEST=');
+        unset($_ENV['TICKETING_RATE_LIMIT_TEST']);
+        $fromDefault = callPrivateMethod($provider, 'resolveRateLimit', ['TICKETING_RATE_LIMIT_TEST', 20]);
+        assertSame(20, $fromDefault, 'Provider deve aplicar default sem valor válido.');
+    },
+    'ticketing_service_provider_resolve_rate_window_enforces_bounds' => static function (): void {
+        putenv('TICKETING_RATE_WINDOW_TEST=5');
+        unset($_ENV['TICKETING_RATE_WINDOW_TEST']);
+
+        $provider = new TicketingServiceProvider();
+        $minBounded = callPrivateMethod($provider, 'resolveRateWindow', ['TICKETING_RATE_WINDOW_TEST', 60]);
+        assertSame(10, $minBounded, 'Provider deve respeitar limite mínimo de janela.');
+
+        putenv('TICKETING_RATE_WINDOW_TEST=7200');
+        $maxBounded = callPrivateMethod($provider, 'resolveRateWindow', ['TICKETING_RATE_WINDOW_TEST', 60]);
+        assertSame(3600, $maxBounded, 'Provider deve respeitar limite máximo de janela.');
+
+        putenv('TICKETING_RATE_WINDOW_TEST=');
+        unset($_ENV['TICKETING_RATE_WINDOW_TEST']);
+        $fromDefault = callPrivateMethod($provider, 'resolveRateWindow', ['TICKETING_RATE_WINDOW_TEST', 45]);
+        assertSame(45, $fromDefault, 'Provider deve aplicar default de janela.');
+    },
+    'ticketing_service_provider_logs_rate_limit_bucket_with_trace_context' => static function (): void {
+        $logPath = createTempLogPath('rate-limiter');
+        $previousLogPath = ini_get('error_log');
+        ini_set('error_log', $logPath);
+
+        try {
+            $request = new FakeRateLimitRequest(
+                method: 'PATCH',
+                path: 'api/tickets/abc/assign',
+                headers: [
+                    'X-Trace-Id' => 'trace-test-1',
+                    'X-Correlation-Id' => 'corr-test-1',
+                ]
+            );
+
+            callPrivateStaticMethod(
+                TicketingServiceProvider::class,
+                'logRateLimitTelemetry',
+                [$request, 'tickets:assign', 45, 30, 77, '127.0.0.1', 'ticketing:77:127.0.0.1:tickets:assign:30:123']
+            );
+
+            $logContent = (string) file_get_contents($logPath);
+            assertTrue(str_contains($logContent, '"type":"rate_limit_bucket"'), 'Telemetria de rate limit deve registrar tipo esperado.');
+            assertTrue(str_contains($logContent, '"endpoint_bucket":"tickets:assign"'), 'Telemetria de rate limit deve registrar endpoint bucket.');
+            assertTrue(str_contains($logContent, '"window_seconds":30'), 'Telemetria de rate limit deve registrar janela em segundos.');
+            assertTrue(str_contains($logContent, '"limit":45'), 'Telemetria de rate limit deve registrar limite configurado.');
+            assertTrue(str_contains($logContent, '"user_id":77'), 'Telemetria de rate limit deve registrar usuário autenticado.');
+            assertTrue(str_contains($logContent, '"trace_id":"trace-test-1"'), 'Telemetria de rate limit deve registrar trace_id recebido.');
+            assertTrue(str_contains($logContent, '"correlation_id":"corr-test-1"'), 'Telemetria de rate limit deve registrar correlation_id recebido.');
+        } finally {
+            ini_set('error_log', is_string($previousLogPath) ? $previousLogPath : '');
+            removeFileIfExists($logPath);
+        }
+    },
 ];
 
 function assertSame(mixed $expected, mixed $actual, string $message): void
@@ -99,6 +163,13 @@ function assertSame(mixed $expected, mixed $actual, string $message): void
         throw new RuntimeException(
             sprintf('%s Esperado: %s. Atual: %s.', $message, formatValue($expected), formatValue($actual))
         );
+    }
+}
+
+function assertTrue(bool $condition, string $message): void
+{
+    if (!$condition) {
+        throw new RuntimeException($message);
     }
 }
 
@@ -117,6 +188,38 @@ function formatValue(mixed $value): string
     }
 
     return (string) $value;
+}
+
+function callPrivateMethod(object $instance, string $methodName, array $arguments = []): mixed
+{
+    $reflection = new ReflectionClass($instance);
+    $method = $reflection->getMethod($methodName);
+    $method->setAccessible(true);
+
+    return $method->invokeArgs($instance, $arguments);
+}
+
+function callPrivateStaticMethod(string $className, string $methodName, array $arguments = []): mixed
+{
+    $reflection = new ReflectionClass($className);
+    $method = $reflection->getMethod($methodName);
+    $method->setAccessible(true);
+
+    return $method->invokeArgs(null, $arguments);
+}
+
+function createTempLogPath(string $suffix): string
+{
+    $unique = str_replace('.', '', uniqid('ticketing_provider_', true));
+
+    return sys_get_temp_dir() . DIRECTORY_SEPARATOR . $unique . '_' . $suffix . '.log';
+}
+
+function removeFileIfExists(string $path): void
+{
+    if (is_file($path)) {
+        unlink($path);
+    }
 }
 
 final class FakeContainer
@@ -159,6 +262,31 @@ final class FakeEventDispatcher
     public function listen(string $eventClass, string $listenerClass): void
     {
         $this->listeners[] = [$eventClass, $listenerClass];
+    }
+}
+
+final class FakeRateLimitRequest
+{
+    public function __construct(
+        private readonly string $method,
+        private readonly string $path,
+        private readonly array $headers
+    ) {
+    }
+
+    public function getMethod(): string
+    {
+        return $this->method;
+    }
+
+    public function path(): string
+    {
+        return $this->path;
+    }
+
+    public function header(string $name): mixed
+    {
+        return $this->headers[$name] ?? null;
     }
 }
 

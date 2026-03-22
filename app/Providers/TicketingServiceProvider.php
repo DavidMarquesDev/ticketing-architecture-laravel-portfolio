@@ -56,6 +56,7 @@ use App\Modules\Ticketing\Infrastructure\Cache\RedisTicketListCache;
 use App\Modules\Ticketing\Infrastructure\Events\LaravelEventDispatcher;
 use App\Modules\Ticketing\Infrastructure\Lock\RedisDistributedLock;
 use App\Modules\Ticketing\Infrastructure\Observability\ErrorLogQueryTelemetry;
+use App\Modules\Ticketing\Infrastructure\Observability\StructuredLogger;
 use App\Modules\Ticketing\Infrastructure\Persistence\Repositories\AuthenticatedUserReadRepository;
 use App\Modules\Ticketing\Infrastructure\Persistence\Repositories\EloquentTicketCommentRepository;
 use App\Modules\Ticketing\Infrastructure\Persistence\Repositories\EloquentTicketRepository;
@@ -187,6 +188,15 @@ final class TicketingServiceProvider
         $assignLimit = $this->resolveRateLimit('TICKETING_RATE_LIMIT_ASSIGN', 25);
         $closeLimit = $this->resolveRateLimit('TICKETING_RATE_LIMIT_CLOSE', 25);
         $replyLimit = $this->resolveRateLimit('TICKETING_RATE_LIMIT_REPLY', 35);
+        $readWindowSeconds = $this->resolveRateWindow('TICKETING_RATE_WINDOW_READ', 60);
+        $indexWindowSeconds = $this->resolveRateWindow('TICKETING_RATE_WINDOW_INDEX', 60);
+        $showWindowSeconds = $this->resolveRateWindow('TICKETING_RATE_WINDOW_SHOW', 60);
+        $commentsWindowSeconds = $this->resolveRateWindow('TICKETING_RATE_WINDOW_COMMENTS', 60);
+        $writeWindowSeconds = $this->resolveRateWindow('TICKETING_RATE_WINDOW_WRITE', 60);
+        $createWindowSeconds = $this->resolveRateWindow('TICKETING_RATE_WINDOW_CREATE', 60);
+        $assignWindowSeconds = $this->resolveRateWindow('TICKETING_RATE_WINDOW_ASSIGN', 30);
+        $closeWindowSeconds = $this->resolveRateWindow('TICKETING_RATE_WINDOW_CLOSE', 30);
+        $replyWindowSeconds = $this->resolveRateWindow('TICKETING_RATE_WINDOW_REPLY', 30);
 
         $rateLimiter::for(
             'ticketing',
@@ -200,7 +210,16 @@ final class TicketingServiceProvider
                 $createLimit,
                 $assignLimit,
                 $closeLimit,
-                $replyLimit
+                $replyLimit,
+                $readWindowSeconds,
+                $indexWindowSeconds,
+                $showWindowSeconds,
+                $commentsWindowSeconds,
+                $writeWindowSeconds,
+                $createWindowSeconds,
+                $assignWindowSeconds,
+                $closeWindowSeconds,
+                $replyWindowSeconds
             ): object {
                 $resolvedUser = null;
 
@@ -241,39 +260,61 @@ final class TicketingServiceProvider
 
                 $endpointBucket = 'tickets:read';
                 $limitPerMinute = $readLimit;
+                $windowSeconds = $readWindowSeconds;
 
                 if ($requestMethod === 'GET' && $normalizedPath === 'tickets') {
                     $endpointBucket = 'tickets:index';
                     $limitPerMinute = $indexLimit;
+                    $windowSeconds = $indexWindowSeconds;
                 } elseif ($requestMethod === 'GET' && $normalizedPath === 'tickets/{ticketId}') {
                     $endpointBucket = 'tickets:show';
                     $limitPerMinute = $showLimit;
+                    $windowSeconds = $showWindowSeconds;
                 } elseif ($requestMethod === 'GET' && $normalizedPath === 'tickets/{ticketId}/comments') {
                     $endpointBucket = 'tickets:comments';
                     $limitPerMinute = $commentsLimit;
+                    $windowSeconds = $commentsWindowSeconds;
                 } elseif ($requestMethod === 'POST' && $normalizedPath === 'tickets') {
                     $endpointBucket = 'tickets:create';
                     $limitPerMinute = $createLimit;
+                    $windowSeconds = $createWindowSeconds;
                 } elseif ($requestMethod === 'PATCH' && $normalizedPath === 'tickets/{ticketId}/assign') {
                     $endpointBucket = 'tickets:assign';
                     $limitPerMinute = $assignLimit;
+                    $windowSeconds = $assignWindowSeconds;
                 } elseif ($requestMethod === 'PATCH' && $normalizedPath === 'tickets/{ticketId}/close') {
                     $endpointBucket = 'tickets:close';
                     $limitPerMinute = $closeLimit;
+                    $windowSeconds = $closeWindowSeconds;
                 } elseif ($requestMethod === 'POST' && $normalizedPath === 'tickets/{ticketId}/reply') {
                     $endpointBucket = 'tickets:reply';
                     $limitPerMinute = $replyLimit;
+                    $windowSeconds = $replyWindowSeconds;
                 } elseif (in_array($requestMethod, ['POST', 'PATCH', 'PUT', 'DELETE'], true)) {
                     $endpointBucket = 'tickets:write';
                     $limitPerMinute = $writeLimit;
+                    $windowSeconds = $writeWindowSeconds;
                 }
 
                 $ip = method_exists($request, 'ip') ? (string) $request->ip() : 'cli';
+                $windowSlot = intdiv(time(), $windowSeconds);
                 $key = sprintf(
-                    'ticketing:%s:%s:%s',
+                    'ticketing:%s:%s:%s:%s:%s',
                     $resolvedUserId > 0 ? (string) $resolvedUserId : 'guest',
                     $ip,
-                    $endpointBucket
+                    $endpointBucket,
+                    (string) $windowSeconds,
+                    (string) $windowSlot
+                );
+
+                self::logRateLimitTelemetry(
+                    request: $request,
+                    endpointBucket: $endpointBucket,
+                    limitPerMinute: $limitPerMinute,
+                    windowSeconds: $windowSeconds,
+                    resolvedUserId: $resolvedUserId,
+                    ip: $ip,
+                    key: $key
                 );
 
                 return $limitClass::perMinute($limitPerMinute)->by($key);
@@ -300,5 +341,94 @@ final class TicketingServiceProvider
         $resolved = (int) $value;
 
         return $resolved > 0 ? $resolved : $default;
+    }
+
+    private function resolveRateWindow(string $envKey, int $default): int
+    {
+        $value = null;
+
+        if ($value === null || $value === false || $value === '') {
+            $value = getenv($envKey);
+        }
+
+        if (($value === null || $value === false || $value === '') && array_key_exists($envKey, $_ENV)) {
+            $value = $_ENV[$envKey];
+        }
+
+        if (!is_numeric($value)) {
+            return $default;
+        }
+
+        $resolved = (int) $value;
+
+        if ($resolved < 10) {
+            return 10;
+        }
+
+        if ($resolved > 3600) {
+            return 3600;
+        }
+
+        return $resolved;
+    }
+
+    private static function logRateLimitTelemetry(
+        object $request,
+        string $endpointBucket,
+        int $limitPerMinute,
+        int $windowSeconds,
+        int $resolvedUserId,
+        string $ip,
+        string $key
+    ): void {
+        StructuredLogger::log(
+            type: 'rate_limit_bucket',
+            payload: [
+                'endpoint_bucket' => $endpointBucket,
+                'limit' => $limitPerMinute,
+                'window_seconds' => $windowSeconds,
+                'user_id' => $resolvedUserId > 0 ? $resolvedUserId : null,
+                'ip' => $ip,
+                'throttle_key' => $key,
+                'method' => method_exists($request, 'getMethod') ? strtoupper((string) $request->getMethod()) : null,
+                'path' => method_exists($request, 'path') ? (string) $request->path() : null,
+                'trace_id' => self::extractRequestHeader($request, 'X-Trace-Id'),
+                'correlation_id' => self::extractRequestHeader($request, 'X-Correlation-Id'),
+            ]
+        );
+    }
+
+    private static function extractRequestHeader(object $request, string $headerName): ?string
+    {
+        if (method_exists($request, 'header')) {
+            $header = $request->header($headerName);
+
+            if (is_string($header) && trim($header) !== '') {
+                return trim($header);
+            }
+        }
+
+        if (method_exists($request, 'headers')) {
+            $headers = $request->headers();
+
+            if (is_object($headers) && method_exists($headers, 'get')) {
+                $header = $headers->get($headerName);
+
+                if (is_string($header) && trim($header) !== '') {
+                    return trim($header);
+                }
+            }
+        }
+
+        if (method_exists($request, 'server')) {
+            $serverKey = 'HTTP_' . strtoupper(str_replace('-', '_', $headerName));
+            $header = $request->server($serverKey, null);
+
+            if (is_string($header) && trim($header) !== '') {
+                return trim($header);
+            }
+        }
+
+        return null;
     }
 }
