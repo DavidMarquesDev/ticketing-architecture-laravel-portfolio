@@ -18,4 +18,16 @@ final class InMemoryTicketCommentRepository implements TicketCommentRepositoryPo
 
         return $comment;
     }
+
+    public function listByTicketId(string $ticketId, int $page, int $perPage): array
+    {
+        $filteredComments = array_filter(
+            self::$comments,
+            static fn (TicketComment $comment): bool => $comment->ticketId() === $ticketId
+        );
+
+        $offset = max(0, ($page - 1) * $perPage);
+
+        return array_values(array_slice($filteredComments, $offset, $perPage, true));
+    }
 }

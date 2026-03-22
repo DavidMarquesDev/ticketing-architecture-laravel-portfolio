@@ -46,6 +46,21 @@ $tests = [
         assertSame(1, count($storedComments), 'Persistência com mesmo id deve manter apenas um registro.');
         assertSame('Mensagem atualizada.', $storedComments['c-1']->message(), 'Registro final deve refletir último save.');
     },
+    'inmemory_ticket_comment_repository_list_by_ticket_id_with_pagination' => static function (): void {
+        resetRepositoryState();
+        $repository = new InMemoryTicketCommentRepository();
+        $repository->save(TicketComment::create('c-1', 't-1', 99, 'Mensagem 1'));
+        $repository->save(TicketComment::create('c-2', 't-2', 99, 'Mensagem 2'));
+        $repository->save(TicketComment::create('c-3', 't-1', 99, 'Mensagem 3'));
+
+        $pageOne = $repository->listByTicketId('t-1', 1, 1);
+        $pageTwo = $repository->listByTicketId('t-1', 2, 1);
+
+        assertSame(1, count($pageOne), 'Página 1 deve conter um comentário.');
+        assertSame(1, count($pageTwo), 'Página 2 deve conter um comentário.');
+        assertSame('c-1', $pageOne[0]->id(), 'Primeiro comentário da página 1 deve ser c-1.');
+        assertSame('c-3', $pageTwo[0]->id(), 'Primeiro comentário da página 2 deve ser c-3.');
+    },
 ];
 
 function resetRepositoryState(): void

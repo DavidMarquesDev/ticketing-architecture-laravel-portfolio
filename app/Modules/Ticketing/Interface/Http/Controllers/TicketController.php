@@ -14,13 +14,17 @@ use App\Modules\Ticketing\Application\Ports\In\AssignTicketUseCase;
 use App\Modules\Ticketing\Application\Ports\In\CloseTicketUseCase;
 use App\Modules\Ticketing\Application\Ports\In\CreateTicketUseCase;
 use App\Modules\Ticketing\Application\Ports\In\GetTicketDetailsUseCase;
+use App\Modules\Ticketing\Application\Ports\In\ListTicketCommentsUseCase;
 use App\Modules\Ticketing\Application\Ports\In\ListTicketsUseCase;
 use App\Modules\Ticketing\Application\Ports\In\ReplyTicketUseCase;
 use App\Modules\Ticketing\Application\Queries\GetTicketDetailsQuery;
+use App\Modules\Ticketing\Application\Queries\ListTicketCommentsQuery;
 use App\Modules\Ticketing\Domain\Entities\Ticket;
+use App\Modules\Ticketing\Domain\Entities\TicketComment;
 use App\Modules\Ticketing\Domain\Exceptions\TicketNotFoundException;
 use App\Modules\Ticketing\Interface\Http\Requests\AssignTicketRequest;
 use App\Modules\Ticketing\Interface\Http\Requests\CloseTicketRequest;
+use App\Modules\Ticketing\Interface\Http\Requests\ListTicketCommentsRequest;
 use App\Modules\Ticketing\Interface\Http\Requests\ListTicketsRequest;
 use App\Modules\Ticketing\Interface\Http\Requests\ReplyTicketRequest;
 use App\Modules\Ticketing\Interface\Http\Requests\ShowTicketRequest;
@@ -59,6 +63,7 @@ final class TicketController
         private readonly CreateTicketUseCase $createTicketUseCase,
         private readonly ListTicketsUseCase $listTicketsUseCase,
         private readonly GetTicketDetailsUseCase $getTicketDetailsUseCase,
+        private readonly ListTicketCommentsUseCase $listTicketCommentsUseCase,
         private readonly AssignTicketUseCase $assignTicketUseCase,
         private readonly CloseTicketUseCase $closeTicketUseCase,
         private readonly ReplyTicketUseCase $replyTicketUseCase
@@ -228,6 +233,36 @@ final class TicketController
 
         return [
             'data' => (new TicketCommentResource($comment))->toArray($request),
+        ];
+    }
+
+    public function comments(ListTicketCommentsRequest $request, string $ticketId): array
+    {
+        $authenticatedUser = $this->authenticatedUser($request);
+
+        if ($authenticatedUser === null) {
+            return $this->errorResponse('UNAUTHENTICATED', 'Usuário não autenticado.', 401);
+        }
+
+        $query = $this->queryParams($request);
+
+        try {
+            $comments = $this->listTicketCommentsUseCase->execute(
+                new ListTicketCommentsQuery(
+                    ticketId: $ticketId,
+                    page: (int) ($query['page'] ?? 1),
+                    perPage: (int) ($query['per_page'] ?? 15)
+                )
+            );
+        } catch (TicketNotFoundException $exception) {
+            return $this->errorResponse('TICKET_NOT_FOUND', $exception->getMessage(), 404);
+        }
+
+        return [
+            'data' => array_map(
+                fn (TicketComment $comment): array => (new TicketCommentResource($comment))->toArray($request),
+                $comments
+            ),
         ];
     }
 

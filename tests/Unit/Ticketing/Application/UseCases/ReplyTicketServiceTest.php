@@ -36,11 +36,11 @@ $tests = [
     'reply_ticket_success' => static function (): void {
         $ticket = Ticket::open('t-2', 20, 'Erro login', 'Token inválido');
 
-        $ticketRepository = new FakeTicketRepository([$ticket->id() => $ticket]);
-        $commentRepository = new FakeTicketCommentRepository();
-        $cache = new FakeTicketListCache();
-        $lock = new FakeLock();
-        $dispatcher = new FakeEventDispatcher();
+        $ticketRepository = new ReplyFakeTicketRepository([$ticket->id() => $ticket]);
+        $commentRepository = new ReplyFakeTicketCommentRepository();
+        $cache = new ReplyFakeTicketListCache();
+        $lock = new ReplyFakeLock();
+        $dispatcher = new ReplyFakeEventDispatcher();
 
         $service = new ReplyTicketService($ticketRepository, $commentRepository, $cache, $lock, $dispatcher);
         $comment = $service->execute(new ReplyTicketInputDTO('t-2', 99, 'Aplicada correção.'));
@@ -53,11 +53,11 @@ $tests = [
         assertTrue(isset($dispatcher->events[0]) && $dispatcher->events[0] instanceof TicketReplied, 'Evento TicketReplied deve ser disparado.');
     },
     'reply_ticket_not_found' => static function (): void {
-        $ticketRepository = new FakeTicketRepository([]);
-        $commentRepository = new FakeTicketCommentRepository();
-        $cache = new FakeTicketListCache();
-        $lock = new FakeLock();
-        $dispatcher = new FakeEventDispatcher();
+        $ticketRepository = new ReplyFakeTicketRepository([]);
+        $commentRepository = new ReplyFakeTicketCommentRepository();
+        $cache = new ReplyFakeTicketListCache();
+        $lock = new ReplyFakeLock();
+        $dispatcher = new ReplyFakeEventDispatcher();
         $service = new ReplyTicketService($ticketRepository, $commentRepository, $cache, $lock, $dispatcher);
 
         expectException(
@@ -69,11 +69,11 @@ $tests = [
         $ticket = Ticket::open('t-3', 22, 'Erro checkout', 'Falha 500');
         $ticket->close();
 
-        $ticketRepository = new FakeTicketRepository([$ticket->id() => $ticket]);
-        $commentRepository = new FakeTicketCommentRepository();
-        $cache = new FakeTicketListCache();
-        $lock = new FakeLock();
-        $dispatcher = new FakeEventDispatcher();
+        $ticketRepository = new ReplyFakeTicketRepository([$ticket->id() => $ticket]);
+        $commentRepository = new ReplyFakeTicketCommentRepository();
+        $cache = new ReplyFakeTicketListCache();
+        $lock = new ReplyFakeLock();
+        $dispatcher = new ReplyFakeEventDispatcher();
         $service = new ReplyTicketService($ticketRepository, $commentRepository, $cache, $lock, $dispatcher);
 
         expectException(
@@ -137,7 +137,7 @@ function formatValue(mixed $value): string
     return (string) $value;
 }
 
-final class FakeTicketRepository implements TicketRepositoryPort
+final class ReplyFakeTicketRepository implements TicketRepositoryPort
 {
     public function __construct(
         public array $tickets
@@ -164,7 +164,7 @@ final class FakeTicketRepository implements TicketRepositoryPort
     }
 }
 
-final class FakeTicketCommentRepository implements TicketCommentRepositoryPort
+final class ReplyFakeTicketCommentRepository implements TicketCommentRepositoryPort
 {
     public array $comments = [];
 
@@ -174,9 +174,19 @@ final class FakeTicketCommentRepository implements TicketCommentRepositoryPort
 
         return $comment;
     }
+
+    public function listByTicketId(string $ticketId, int $page, int $perPage): array
+    {
+        $filteredComments = array_filter(
+            $this->comments,
+            static fn (TicketComment $comment): bool => $comment->ticketId() === $ticketId
+        );
+
+        return array_values($filteredComments);
+    }
 }
 
-final class FakeTicketListCache implements TicketListCachePort
+final class ReplyFakeTicketListCache implements TicketListCachePort
 {
     public bool $forgetCalled = false;
 
@@ -195,7 +205,7 @@ final class FakeTicketListCache implements TicketListCachePort
     }
 }
 
-final class FakeLock implements DistributedLockPort
+final class ReplyFakeLock implements DistributedLockPort
 {
     public string $lastKey = '';
 
@@ -210,7 +220,7 @@ final class FakeLock implements DistributedLockPort
     }
 }
 
-final class FakeEventDispatcher implements EventDispatcherPort
+final class ReplyFakeEventDispatcher implements EventDispatcherPort
 {
     public array $events = [];
 

@@ -65,15 +65,18 @@ namespace {
     use App\Modules\Ticketing\Application\Ports\In\CloseTicketUseCase;
     use App\Modules\Ticketing\Application\Ports\In\CreateTicketUseCase;
     use App\Modules\Ticketing\Application\Ports\In\GetTicketDetailsUseCase;
+    use App\Modules\Ticketing\Application\Ports\In\ListTicketCommentsUseCase;
     use App\Modules\Ticketing\Application\Ports\In\ListTicketsUseCase;
     use App\Modules\Ticketing\Application\Ports\In\ReplyTicketUseCase;
     use App\Modules\Ticketing\Application\Queries\GetTicketDetailsQuery;
+    use App\Modules\Ticketing\Application\Queries\ListTicketCommentsQuery;
     use App\Modules\Ticketing\Domain\Entities\Ticket;
     use App\Modules\Ticketing\Domain\Entities\TicketComment;
     use App\Modules\Ticketing\Domain\Exceptions\TicketNotFoundException;
     use App\Modules\Ticketing\Interface\Http\Controllers\TicketController;
     use App\Modules\Ticketing\Interface\Http\Requests\AssignTicketRequest;
     use App\Modules\Ticketing\Interface\Http\Requests\CloseTicketRequest;
+    use App\Modules\Ticketing\Interface\Http\Requests\ListTicketCommentsRequest;
     use App\Modules\Ticketing\Interface\Http\Requests\ListTicketsRequest;
     use App\Modules\Ticketing\Interface\Http\Requests\ReplyTicketRequest;
     use App\Modules\Ticketing\Interface\Http\Requests\ShowTicketRequest;
@@ -99,6 +102,7 @@ namespace {
                 },
                 noopListUseCase(),
                 noopGetTicketDetailsUseCase(),
+                noopListTicketCommentsUseCase(),
                 noopAssignUseCase(),
                 noopCloseUseCase(),
                 noopReplyUseCase()
@@ -129,6 +133,7 @@ namespace {
                 },
                 noopListUseCase(),
                 noopGetTicketDetailsUseCase(),
+                noopListTicketCommentsUseCase(),
                 noopAssignUseCase(),
                 noopCloseUseCase(),
                 noopReplyUseCase()
@@ -164,6 +169,7 @@ namespace {
                 },
                 noopListUseCase(),
                 noopGetTicketDetailsUseCase(),
+                noopListTicketCommentsUseCase(),
                 noopAssignUseCase(),
                 noopCloseUseCase(),
                 noopReplyUseCase()
@@ -196,6 +202,7 @@ namespace {
                     }
                 },
                 noopGetTicketDetailsUseCase(),
+                noopListTicketCommentsUseCase(),
                 noopAssignUseCase(),
                 noopCloseUseCase(),
                 noopReplyUseCase()
@@ -223,6 +230,7 @@ namespace {
                         return Ticket::open($query->ticketId, 20, 'Título detalhado', 'Descrição detalhada');
                     }
                 },
+                noopListTicketCommentsUseCase(),
                 noopAssignUseCase(),
                 noopCloseUseCase(),
                 noopReplyUseCase()
@@ -247,6 +255,7 @@ namespace {
                         throw new TicketNotFoundException('Ticket não encontrado.');
                     }
                 },
+                noopListTicketCommentsUseCase(),
                 noopAssignUseCase(),
                 noopCloseUseCase(),
                 noopReplyUseCase()
@@ -265,6 +274,7 @@ namespace {
                 noopCreateUseCase(),
                 noopListUseCase(),
                 noopGetTicketDetailsUseCase(),
+                noopListTicketCommentsUseCase(),
                 new class implements AssignTicketUseCase {
                     public function execute(AssignTicketInputDTO $input): Ticket
                     {
@@ -289,6 +299,7 @@ namespace {
                 noopCreateUseCase(),
                 noopListUseCase(),
                 noopGetTicketDetailsUseCase(),
+                noopListTicketCommentsUseCase(),
                 new class implements AssignTicketUseCase {
                     public function execute(AssignTicketInputDTO $input): Ticket
                     {
@@ -316,6 +327,7 @@ namespace {
                 noopCreateUseCase(),
                 noopListUseCase(),
                 noopGetTicketDetailsUseCase(),
+                noopListTicketCommentsUseCase(),
                 noopAssignUseCase(),
                 new class implements CloseTicketUseCase {
                     public function execute(CloseTicketInputDTO $input): Ticket
@@ -342,6 +354,7 @@ namespace {
                 noopCreateUseCase(),
                 noopListUseCase(),
                 noopGetTicketDetailsUseCase(),
+                noopListTicketCommentsUseCase(),
                 noopAssignUseCase(),
                 noopCloseUseCase(),
                 new class implements ReplyTicketUseCase {
@@ -362,6 +375,61 @@ namespace {
             assertSame(99, $input->authorId, 'DTO de reply deve mapear author_id.');
             assertSame('Aplicada correção.', $response['data']['message'], 'Response deve serializar mensagem.');
             assertSame('c-http-1', $response['data']['id'], 'Response deve serializar id do comentário.');
+        },
+        'ticket_controller_comments_returns_200_and_list_contract' => static function (): void {
+            resetHttpContext();
+            $_GET = ['page' => '2', 'per_page' => '1'];
+
+            $controller = new TicketController(
+                noopCreateUseCase(),
+                noopListUseCase(),
+                noopGetTicketDetailsUseCase(),
+                new class implements ListTicketCommentsUseCase {
+                    public function execute(ListTicketCommentsQuery $query): array
+                    {
+                        $GLOBALS['captured_comments_query'] = $query;
+
+                        return [
+                            TicketComment::create('c-http-list-1', $query->ticketId, 99, 'Primeira mensagem'),
+                        ];
+                    }
+                },
+                noopAssignUseCase(),
+                noopCloseUseCase(),
+                noopReplyUseCase()
+            );
+
+            $response = $controller->comments(new ListTicketCommentsRequest(), 't-http-comments-1');
+            $query = $GLOBALS['captured_comments_query'];
+
+            assertSame('t-http-comments-1', $query->ticketId, 'Comments deve mapear ticketId para Query.');
+            assertSame(2, $query->page, 'Comments deve mapear page para Query.');
+            assertSame(1, $query->perPage, 'Comments deve mapear per_page para Query.');
+            assertSame('c-http-list-1', $response['data'][0]['id'], 'Comments deve serializar id do comentário.');
+            assertSame('Primeira mensagem', $response['data'][0]['message'], 'Comments deve serializar mensagem.');
+        },
+        'ticket_controller_comments_maps_not_found_to_404' => static function (): void {
+            resetHttpContext();
+
+            $controller = new TicketController(
+                noopCreateUseCase(),
+                noopListUseCase(),
+                noopGetTicketDetailsUseCase(),
+                new class implements ListTicketCommentsUseCase {
+                    public function execute(ListTicketCommentsQuery $query): array
+                    {
+                        throw new TicketNotFoundException('Ticket não encontrado.');
+                    }
+                },
+                noopAssignUseCase(),
+                noopCloseUseCase(),
+                noopReplyUseCase()
+            );
+
+            $response = $controller->comments(new ListTicketCommentsRequest(), 't-http-comments-404');
+
+            assertSame(404, (int) ($GLOBALS['ticketing_http_status_code'] ?? 200), 'Comments deve mapear TicketNotFoundException para 404.');
+            assertSame('TICKET_NOT_FOUND', $response['error']['code'], 'Comments deve retornar código TICKET_NOT_FOUND.');
         },
     ];
 
@@ -409,6 +477,16 @@ namespace {
             public function execute(GetTicketDetailsQuery $query): Ticket
             {
                 return Ticket::open($query->ticketId, 1, 'noop', 'noop');
+            }
+        };
+    }
+
+    function noopListTicketCommentsUseCase(): ListTicketCommentsUseCase
+    {
+        return new class implements ListTicketCommentsUseCase {
+            public function execute(ListTicketCommentsQuery $query): array
+            {
+                return [];
             }
         };
     }

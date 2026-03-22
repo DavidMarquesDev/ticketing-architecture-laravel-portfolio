@@ -11,6 +11,7 @@ if (class_exists($routeFacade)) {
     $routeFacade::middleware(['auth:sanctum'])->group(function () use ($routeFacade): void {
         $routeFacade::get('/tickets', [TicketController::class, 'index']);
         $routeFacade::get('/tickets/{ticketId}', [TicketController::class, 'show']);
+        $routeFacade::get('/tickets/{ticketId}/comments', [TicketController::class, 'comments']);
         $routeFacade::post('/tickets', [TicketController::class, 'store']);
         $routeFacade::patch('/tickets/{ticketId}/assign', [TicketController::class, 'assign']);
         $routeFacade::post('/tickets/{ticketId}/reply', [TicketController::class, 'reply']);
