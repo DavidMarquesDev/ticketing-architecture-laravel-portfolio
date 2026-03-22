@@ -21,7 +21,7 @@ final class TicketingLaravelServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        (new TicketingServiceProvider())->register();
+        (new TicketingServiceProvider($this->app))->register();
     }
 
     /**
@@ -31,6 +31,6 @@ final class TicketingLaravelServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        (new TicketingServiceProvider())->boot();
+        (new TicketingServiceProvider($this->app))->boot();
     }
 }
