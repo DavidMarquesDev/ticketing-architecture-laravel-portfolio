@@ -23,6 +23,7 @@ use App\Modules\Ticketing\Application\Ports\Out\DistributedLockPort;
 use App\Modules\Ticketing\Application\Ports\Out\EventDispatcherPort;
 use App\Modules\Ticketing\Application\Ports\Out\TicketListCachePort;
 use App\Modules\Ticketing\Application\Ports\Out\TicketRepositoryPort;
+use App\Modules\Ticketing\Application\Ports\Out\UserReadRepositoryPort;
 use App\Modules\Ticketing\Application\UseCases\CloseTicketService;
 use App\Modules\Ticketing\Domain\Entities\Ticket;
 use App\Modules\Ticketing\Domain\Events\TicketClosed;
@@ -37,14 +38,17 @@ $tests = [
         $cache = new CloseFakeTicketListCache();
         $lock = new FakeLock();
         $dispatcher = new FakeEventDispatcher();
+        $userReadRepository = new FakeUserReadRepository(true);
 
-        $service = new CloseTicketService($ticketRepository, $cache, $lock, $dispatcher);
-        $closedTicket = $service->execute(new CloseTicketInputDTO('t-1'));
+        $service = new CloseTicketService($ticketRepository, $cache, $lock, $dispatcher, $userReadRepository);
+        $closedTicket = $service->execute(new CloseTicketInputDTO('t-1', 10));
 
         assertSame(TicketStatus::CLOSED, $closedTicket->status(), 'Status deve ser CLOSED.');
         assertTrue($cache->forgetCalled, 'Cache deve ser invalidado no fechamento.');
         assertSame('ticket:close:t-1', $lock->lastKey, 'Lock deve usar chave esperada.');
         assertSame(5, $lock->lastSeconds, 'Lock deve usar TTL esperado.');
+        assertSame(10, $userReadRepository->lastUserId, 'Autorização deve usar usuário autenticado.');
+        assertSame('admin,agent', implode(',', $userReadRepository->lastRoles), 'Autorização deve validar roles permitidas.');
         assertTrue(isset($dispatcher->events[0]) && $dispatcher->events[0] instanceof TicketClosed, 'Evento TicketClosed deve ser disparado.');
     },
     'close_ticket_not_found' => static function (): void {
@@ -52,10 +56,11 @@ $tests = [
         $cache = new CloseFakeTicketListCache();
         $lock = new FakeLock();
         $dispatcher = new FakeEventDispatcher();
-        $service = new CloseTicketService($ticketRepository, $cache, $lock, $dispatcher);
+        $userReadRepository = new FakeUserReadRepository(true);
+        $service = new CloseTicketService($ticketRepository, $cache, $lock, $dispatcher, $userReadRepository);
 
         expectException(
-            static fn (): mixed => $service->execute(new CloseTicketInputDTO('inexistente')),
+            static fn (): mixed => $service->execute(new CloseTicketInputDTO('inexistente', 10)),
             TicketNotFoundException::class
         );
     },
@@ -67,12 +72,28 @@ $tests = [
         $cache = new CloseFakeTicketListCache();
         $lock = new FakeLock();
         $dispatcher = new FakeEventDispatcher();
-        $service = new CloseTicketService($ticketRepository, $cache, $lock, $dispatcher);
+        $userReadRepository = new FakeUserReadRepository(true);
+        $service = new CloseTicketService($ticketRepository, $cache, $lock, $dispatcher, $userReadRepository);
 
         expectException(
-            static fn (): mixed => $service->execute(new CloseTicketInputDTO('t-closed')),
+            static fn (): mixed => $service->execute(new CloseTicketInputDTO('t-closed', 10)),
             TicketStateException::class
         );
+    },
+    'close_ticket_forbidden_without_allowed_role' => static function (): void {
+        $ticket = Ticket::open('t-forbidden', 10, 'Erro checkout', 'Falha 500');
+        $ticketRepository = new FakeTicketRepository([$ticket->id() => $ticket]);
+        $cache = new CloseFakeTicketListCache();
+        $lock = new FakeLock();
+        $dispatcher = new FakeEventDispatcher();
+        $userReadRepository = new FakeUserReadRepository(false);
+        $service = new CloseTicketService($ticketRepository, $cache, $lock, $dispatcher, $userReadRepository);
+
+        expectException(
+            static fn (): mixed => $service->execute(new CloseTicketInputDTO('t-forbidden', 33)),
+            \DomainException::class
+        );
+        assertSame(false, $cache->forgetCalled, 'Cache não deve ser invalidado quando autorização falha.');
     },
 ];
 
@@ -227,6 +248,31 @@ final class FakeEventDispatcher implements EventDispatcherPort
     public function dispatch(object $event): void
     {
         $this->events[] = $event;
+    }
+}
+
+final class FakeUserReadRepository implements UserReadRepositoryPort
+{
+    public int $lastUserId = 0;
+
+    public array $lastRoles = [];
+
+    public function __construct(
+        private readonly bool $hasRole
+    ) {
+    }
+
+    public function existsById(int $userId): bool
+    {
+        return true;
+    }
+
+    public function hasAnyRole(int $userId, array $roles): bool
+    {
+        $this->lastUserId = $userId;
+        $this->lastRoles = $roles;
+
+        return $this->hasRole;
     }
 }
 

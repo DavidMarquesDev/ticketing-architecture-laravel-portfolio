@@ -10,15 +10,20 @@ use App\Modules\Ticketing\Application\Ports\In\AssignTicketUseCase;
 use App\Modules\Ticketing\Application\Ports\Out\DistributedLockPort;
 use App\Modules\Ticketing\Application\Ports\Out\TicketListCachePort;
 use App\Modules\Ticketing\Application\Ports\Out\TicketRepositoryPort;
+use App\Modules\Ticketing\Application\Ports\Out\UserReadRepositoryPort;
 use App\Modules\Ticketing\Domain\Entities\Ticket;
 use App\Modules\Ticketing\Domain\Exceptions\TicketNotFoundException;
+use DomainException;
 
 final class AssignTicketService implements AssignTicketUseCase
 {
+    private const ALLOWED_ROLES = ['admin', 'agent'];
+
     public function __construct(
         private readonly TicketRepositoryPort $ticketRepository,
         private readonly TicketListCachePort $ticketListCache,
-        private readonly DistributedLockPort $lock
+        private readonly DistributedLockPort $lock,
+        private readonly UserReadRepositoryPort $userReadRepository
     ) {
     }
 
@@ -28,6 +33,10 @@ final class AssignTicketService implements AssignTicketUseCase
             key: sprintf('ticket:assign:%s', $input->ticketId),
             seconds: 5,
             callback: function () use ($input): Ticket {
+                if (!$this->userReadRepository->hasAnyRole($input->actorUserId, self::ALLOWED_ROLES)) {
+                    throw new DomainException('Usuário sem permissão para atribuir tickets.');
+                }
+
                 $ticket = $this->ticketRepository->findById($input->ticketId);
 
                 if ($ticket === null) {

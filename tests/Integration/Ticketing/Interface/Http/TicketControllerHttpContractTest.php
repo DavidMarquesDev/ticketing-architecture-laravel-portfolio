@@ -283,6 +283,7 @@ namespace {
         },
         'ticket_controller_assign_maps_not_found_to_404' => static function (): void {
             resetHttpContext();
+            $GLOBALS['ticketing_authenticated_user'] = ['id' => 99, 'roles' => ['admin']];
             $GLOBALS['ticketing_http_payload'] = json_encode(['assignee_id' => 77], JSON_THROW_ON_ERROR);
 
             $controller = new TicketController(
@@ -293,6 +294,8 @@ namespace {
                 new class implements AssignTicketUseCase {
                     public function execute(AssignTicketInputDTO $input): Ticket
                     {
+                        $GLOBALS['captured_assign_input'] = $input;
+
                         throw new TicketNotFoundException('Ticket não encontrado.');
                     }
                 },
@@ -301,9 +304,11 @@ namespace {
             );
 
             $response = $controller->assign(new AssignTicketRequest(), 'ticket-inexistente');
+            $input = $GLOBALS['captured_assign_input'];
 
             assertSame(404, (int) ($GLOBALS['ticketing_http_status_code'] ?? 200), 'Assign deve mapear TicketNotFoundException para 404.');
             assertSame('TICKET_NOT_FOUND', $response['error']['code'], 'Payload de erro deve usar código padronizado.');
+            assertSame(99, $input->actorUserId, 'Assign deve enviar usuário autenticado no DTO de atribuição.');
         },
         'ticket_controller_assign_returns_403_when_user_has_no_permission' => static function (): void {
             resetHttpContext();
@@ -320,7 +325,7 @@ namespace {
                     {
                         $GLOBALS['assign_use_case_called'] = true;
 
-                        return Ticket::open('t-http-forbidden', 1, 'noop', 'noop');
+                        throw new \DomainException('Usuário sem permissão para atribuir tickets.');
                     }
                 },
                 noopCloseUseCase(),
@@ -333,10 +338,11 @@ namespace {
 
             assertSame(403, (int) ($GLOBALS['ticketing_http_status_code'] ?? 200), 'Assign deve responder 403 sem permissão.');
             assertSame('FORBIDDEN', $response['error']['code'], 'Assign deve retornar código FORBIDDEN.');
-            assertSame(false, $GLOBALS['assign_use_case_called'], 'Assign não deve executar caso de uso sem permissão.');
+            assertSame(true, $GLOBALS['assign_use_case_called'], 'Assign deve mapear retorno de autorização do caso de uso.');
         },
         'ticket_controller_close_maps_conflict_to_409' => static function (): void {
             resetHttpContext();
+            $GLOBALS['ticketing_authenticated_user'] = ['id' => 44, 'roles' => ['agent']];
 
             $controller = new TicketController(
                 noopCreateUseCase(),
@@ -347,6 +353,8 @@ namespace {
                 new class implements CloseTicketUseCase {
                     public function execute(CloseTicketInputDTO $input): Ticket
                     {
+                        $GLOBALS['captured_close_input'] = $input;
+
                         throw new \RuntimeException('Ticket já está fechado.');
                     }
                 },
@@ -354,9 +362,39 @@ namespace {
             );
 
             $response = $controller->close(new CloseTicketRequest(), 't-closed');
+            $input = $GLOBALS['captured_close_input'];
 
             assertSame(409, (int) ($GLOBALS['ticketing_http_status_code'] ?? 200), 'Close deve mapear conflito para 409.');
             assertSame('TICKET_CONFLICT', $response['error']['code'], 'Payload de erro deve usar TICKET_CONFLICT.');
+            assertSame(44, $input->actorUserId, 'Close deve enviar usuário autenticado no DTO de fechamento.');
+        },
+        'ticket_controller_close_returns_403_when_user_has_no_permission' => static function (): void {
+            resetHttpContext();
+            $GLOBALS['ticketing_authenticated_user'] = ['id' => 33, 'roles' => ['customer']];
+            $GLOBALS['close_use_case_called'] = false;
+
+            $controller = new TicketController(
+                noopCreateUseCase(),
+                noopListUseCase(),
+                noopGetTicketDetailsUseCase(),
+                noopListTicketCommentsUseCase(),
+                noopAssignUseCase(),
+                new class implements CloseTicketUseCase {
+                    public function execute(CloseTicketInputDTO $input): Ticket
+                    {
+                        $GLOBALS['close_use_case_called'] = true;
+
+                        throw new \DomainException('Usuário sem permissão para fechar tickets.');
+                    }
+                },
+                noopReplyUseCase()
+            );
+
+            $response = $controller->close(new CloseTicketRequest(), 'ticket-forbidden');
+
+            assertSame(403, (int) ($GLOBALS['ticketing_http_status_code'] ?? 200), 'Close deve responder 403 sem permissão.');
+            assertSame('FORBIDDEN', $response['error']['code'], 'Close deve retornar código FORBIDDEN.');
+            assertSame(true, $GLOBALS['close_use_case_called'], 'Close deve mapear retorno de autorização do caso de uso.');
         },
         'ticket_controller_reply_returns_201_and_comment_contract' => static function (): void {
             resetHttpContext();

@@ -31,6 +31,7 @@ use App\Modules\Ticketing\Interface\Http\Requests\ShowTicketRequest;
 use App\Modules\Ticketing\Interface\Http\Requests\StoreTicketRequest;
 use App\Modules\Ticketing\Interface\Http\Resources\TicketCommentResource;
 use App\Modules\Ticketing\Interface\Http\Resources\TicketResource;
+use DomainException;
 use RuntimeException;
 
 /**
@@ -157,19 +158,18 @@ final class TicketController
             return $this->errorResponse('UNAUTHENTICATED', 'Usuário não autenticado.', 401);
         }
 
-        if (!$this->hasAnyRole($authenticatedUser, ['admin', 'agent'])) {
-            return $this->errorResponse('FORBIDDEN', 'Usuário sem permissão para atribuir tickets.', 403);
-        }
-
         $payload = $this->requestPayload($request);
 
         try {
             $ticket = $this->assignTicketUseCase->execute(
                 new AssignTicketInputDTO(
                     ticketId: $ticketId,
-                    assigneeId: (int) ($payload['assignee_id'] ?? 0)
+                    assigneeId: (int) ($payload['assignee_id'] ?? 0),
+                    actorUserId: (int) ($authenticatedUser['id'] ?? 0)
                 )
             );
+        } catch (DomainException $exception) {
+            return $this->errorResponse('FORBIDDEN', $exception->getMessage(), 403);
         } catch (TicketNotFoundException $exception) {
             return $this->errorResponse('TICKET_NOT_FOUND', $exception->getMessage(), 404);
         } catch (RuntimeException $exception) {
@@ -189,14 +189,15 @@ final class TicketController
             return $this->errorResponse('UNAUTHENTICATED', 'Usuário não autenticado.', 401);
         }
 
-        if (!$this->hasAnyRole($authenticatedUser, ['admin', 'agent'])) {
-            return $this->errorResponse('FORBIDDEN', 'Usuário sem permissão para fechar tickets.', 403);
-        }
-
         try {
             $ticket = $this->closeTicketUseCase->execute(
-                new CloseTicketInputDTO(ticketId: $ticketId)
+                new CloseTicketInputDTO(
+                    ticketId: $ticketId,
+                    actorUserId: (int) ($authenticatedUser['id'] ?? 0)
+                )
             );
+        } catch (DomainException $exception) {
+            return $this->errorResponse('FORBIDDEN', $exception->getMessage(), 403);
         } catch (TicketNotFoundException $exception) {
             return $this->errorResponse('TICKET_NOT_FOUND', $exception->getMessage(), 404);
         } catch (RuntimeException $exception) {
@@ -415,50 +416,14 @@ final class TicketController
         }
 
         if (is_array($user)) {
-            $id = (int) ($user['id'] ?? 0);
-            $roles = $this->normalizeRoles($user['roles'] ?? []);
-
             return [
-                'id' => $id,
-                'roles' => $roles,
-                'subject' => $user,
+                'id' => (int) ($user['id'] ?? 0),
             ];
         }
 
-        $id = $this->extractUserId($user);
-        $roles = $this->extractUserRoles($user);
-
         return [
-            'id' => $id,
-            'roles' => $roles,
-            'subject' => $user,
+            'id' => $this->extractUserId($user),
         ];
-    }
-
-    private function hasAnyRole(array $authenticatedUser, array $allowedRoles): bool
-    {
-        $normalizedAllowedRoles = array_map('strtolower', $allowedRoles);
-        $userRoles = array_map('strtolower', $authenticatedUser['roles'] ?? []);
-
-        if (array_intersect($userRoles, $normalizedAllowedRoles) !== []) {
-            return true;
-        }
-
-        $subject = $authenticatedUser['subject'] ?? null;
-
-        if (is_object($subject) && method_exists($subject, 'hasAnyRole')) {
-            return (bool) $subject->hasAnyRole($allowedRoles);
-        }
-
-        if (is_object($subject) && method_exists($subject, 'hasRole')) {
-            foreach ($allowedRoles as $allowedRole) {
-                if ((bool) $subject->hasRole($allowedRole)) {
-                    return true;
-                }
-            }
-        }
-
-        return false;
     }
 
     private function extractUserId(object $user): int
@@ -478,45 +443,6 @@ final class TicketController
         return 0;
     }
 
-    private function extractUserRoles(object $user): array
-    {
-        if (method_exists($user, 'roles')) {
-            return $this->normalizeRoles($user->roles());
-        }
-
-        if (method_exists($user, 'getRoleNames')) {
-            return $this->normalizeRoles($user->getRoleNames());
-        }
-
-        if (property_exists($user, 'roles')) {
-            return $this->normalizeRoles($user->roles);
-        }
-
-        return [];
-    }
-
-    private function normalizeRoles(mixed $roles): array
-    {
-        if (!is_iterable($roles) && !is_array($roles)) {
-            return [];
-        }
-
-        $normalized = [];
-
-        foreach ($roles as $role) {
-            if (is_string($role) && $role !== '') {
-                $normalized[] = strtolower($role);
-                continue;
-            }
-
-            if (is_object($role) && property_exists($role, 'name') && is_string($role->name) && $role->name !== '') {
-                $normalized[] = strtolower($role->name);
-            }
-        }
-
-        return array_values(array_unique($normalized));
-    }
-
     private function fallbackAuthenticatedUser(): ?array
     {
         if (array_key_exists('ticketing_authenticated_user', $GLOBALS)) {
@@ -529,16 +455,12 @@ final class TicketController
             if (is_array($user)) {
                 return [
                     'id' => (int) ($user['id'] ?? 0),
-                    'roles' => $this->normalizeRoles($user['roles'] ?? []),
-                    'subject' => $user,
                 ];
             }
         }
 
         return [
             'id' => 0,
-            'roles' => ['admin'],
-            'subject' => null,
         ];
     }
 

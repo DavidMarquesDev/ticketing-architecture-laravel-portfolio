@@ -9,7 +9,8 @@ final class AssignTicketInputDTO
 {
     public function __construct(
         public readonly string $ticketId,
-        public readonly int $assigneeId
+        public readonly int $assigneeId,
+        public readonly int $actorUserId
     ) {
     }
 }

@@ -22,6 +22,7 @@ use App\Modules\Ticketing\Application\DTOs\AssignTicketInputDTO;
 use App\Modules\Ticketing\Application\Ports\Out\DistributedLockPort;
 use App\Modules\Ticketing\Application\Ports\Out\TicketListCachePort;
 use App\Modules\Ticketing\Application\Ports\Out\TicketRepositoryPort;
+use App\Modules\Ticketing\Application\Ports\Out\UserReadRepositoryPort;
 use App\Modules\Ticketing\Application\UseCases\AssignTicketService;
 use App\Modules\Ticketing\Domain\Entities\Ticket;
 use App\Modules\Ticketing\Domain\Enums\TicketStatus;
@@ -34,24 +35,28 @@ $tests = [
         $ticketRepository = new FakeTicketRepository([$ticket->id() => $ticket]);
         $cache = new FakeTicketListCache(null);
         $lock = new FakeLock();
+        $userReadRepository = new FakeUserReadRepository(true);
 
-        $service = new AssignTicketService($ticketRepository, $cache, $lock);
-        $assignedTicket = $service->execute(new AssignTicketInputDTO('t-1', 88));
+        $service = new AssignTicketService($ticketRepository, $cache, $lock, $userReadRepository);
+        $assignedTicket = $service->execute(new AssignTicketInputDTO('t-1', 88, 10));
 
         assertSame(88, $assignedTicket->assigneeId(), 'Atendente deve ser atribuído.');
         assertSame(TicketStatus::PENDING, $assignedTicket->status(), 'Ticket atribuído deve ficar PENDING.');
         assertTrue($cache->forgetCalled, 'Cache deve ser invalidado na atribuição.');
         assertSame('ticket:assign:t-1', $lock->lastKey, 'Lock deve usar chave esperada.');
         assertSame(5, $lock->lastSeconds, 'Lock deve usar TTL esperado.');
+        assertSame(10, $userReadRepository->lastUserId, 'Autorização deve usar usuário autenticado.');
+        assertSame('admin,agent', implode(',', $userReadRepository->lastRoles), 'Autorização deve validar roles permitidas.');
     },
     'assign_ticket_not_found' => static function (): void {
         $ticketRepository = new FakeTicketRepository([]);
         $cache = new FakeTicketListCache(null);
         $lock = new FakeLock();
-        $service = new AssignTicketService($ticketRepository, $cache, $lock);
+        $userReadRepository = new FakeUserReadRepository(true);
+        $service = new AssignTicketService($ticketRepository, $cache, $lock, $userReadRepository);
 
         expectException(
-            static fn (): mixed => $service->execute(new AssignTicketInputDTO('inexistente', 88)),
+            static fn (): mixed => $service->execute(new AssignTicketInputDTO('inexistente', 88, 10)),
             TicketNotFoundException::class
         );
     },
@@ -61,12 +66,27 @@ $tests = [
         $ticketRepository = new FakeTicketRepository([$ticket->id() => $ticket]);
         $cache = new FakeTicketListCache(null);
         $lock = new FakeLock();
-        $service = new AssignTicketService($ticketRepository, $cache, $lock);
+        $userReadRepository = new FakeUserReadRepository(true);
+        $service = new AssignTicketService($ticketRepository, $cache, $lock, $userReadRepository);
 
         expectException(
-            static fn (): mixed => $service->execute(new AssignTicketInputDTO('t-2', 88)),
+            static fn (): mixed => $service->execute(new AssignTicketInputDTO('t-2', 88, 10)),
             TicketStateException::class
         );
+    },
+    'assign_ticket_forbidden_without_allowed_role' => static function (): void {
+        $ticket = Ticket::open('t-3', 10, 'Erro checkout', 'Falha 500');
+        $ticketRepository = new FakeTicketRepository([$ticket->id() => $ticket]);
+        $cache = new FakeTicketListCache(null);
+        $lock = new FakeLock();
+        $userReadRepository = new FakeUserReadRepository(false);
+        $service = new AssignTicketService($ticketRepository, $cache, $lock, $userReadRepository);
+
+        expectException(
+            static fn (): mixed => $service->execute(new AssignTicketInputDTO('t-3', 88, 33)),
+            \DomainException::class
+        );
+        assertSame(false, $cache->forgetCalled, 'Cache não deve ser invalidado quando autorização falha.');
     },
 ];
 
@@ -216,6 +236,31 @@ final class FakeLock implements DistributedLockPort
         $this->lastSeconds = $seconds;
 
         return $callback();
+    }
+}
+
+final class FakeUserReadRepository implements UserReadRepositoryPort
+{
+    public int $lastUserId = 0;
+
+    public array $lastRoles = [];
+
+    public function __construct(
+        private readonly bool $hasRole
+    ) {
+    }
+
+    public function existsById(int $userId): bool
+    {
+        return true;
+    }
+
+    public function hasAnyRole(int $userId, array $roles): bool
+    {
+        $this->lastUserId = $userId;
+        $this->lastRoles = $roles;
+
+        return $this->hasRole;
     }
 }
 
