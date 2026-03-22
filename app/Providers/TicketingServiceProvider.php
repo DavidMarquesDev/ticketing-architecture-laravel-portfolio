@@ -11,6 +11,7 @@ use App\Modules\Ticketing\Application\Listeners\HandleTicketReplied;
 use App\Modules\Ticketing\Application\Listeners\HandleTicketAssigned;
 use App\Modules\Ticketing\Application\Ports\In\AssignTicketCommandHandler;
 use App\Modules\Ticketing\Application\Ports\In\AssignTicketUseCase;
+use App\Modules\Ticketing\Application\Ports\In\AuthenticateUserUseCase;
 use App\Modules\Ticketing\Application\Ports\In\CloseTicketCommandHandler;
 use App\Modules\Ticketing\Application\Ports\In\CloseTicketUseCase;
 use App\Modules\Ticketing\Application\Ports\In\CreateTicketCommandHandler;
@@ -36,12 +37,15 @@ use App\Modules\Ticketing\Application\Ports\Out\QueueDispatcherPort;
 use App\Modules\Ticketing\Application\Ports\Out\TicketCommentRepositoryPort;
 use App\Modules\Ticketing\Application\Ports\Out\TicketListCachePort;
 use App\Modules\Ticketing\Application\Ports\Out\TicketRepositoryPort;
+use App\Modules\Ticketing\Application\Ports\Out\UserAuthenticationRepositoryPort;
 use App\Modules\Ticketing\Application\Ports\Out\UserReadRepositoryPort;
+use App\Modules\Ticketing\Application\Ports\Out\UserTokenIssuerPort;
 use App\Modules\Ticketing\Application\CommandHandlers\AssignTicketCommandHandler as AssignTicketCommandHandlerService;
 use App\Modules\Ticketing\Application\CommandHandlers\CloseTicketCommandHandler as CloseTicketCommandHandlerService;
 use App\Modules\Ticketing\Application\CommandHandlers\CreateTicketCommandHandler as CreateTicketCommandHandlerService;
 use App\Modules\Ticketing\Application\CommandHandlers\ReplyTicketCommandHandler as ReplyTicketCommandHandlerService;
 use App\Modules\Ticketing\Application\UseCases\AssignTicketService;
+use App\Modules\Ticketing\Application\UseCases\AuthenticateUserService;
 use App\Modules\Ticketing\Application\UseCases\CloseTicketService;
 use App\Modules\Ticketing\Application\UseCases\CreateTicketService;
 use App\Modules\Ticketing\Application\UseCases\ListTicketsService;
@@ -53,6 +57,7 @@ use App\Modules\Ticketing\Domain\Events\TicketAssigned;
 use App\Modules\Ticketing\Interface\Http\Policies\TicketPolicy;
 use App\Modules\Ticketing\Infrastructure\Cache\RedisCacheStore;
 use App\Modules\Ticketing\Infrastructure\Cache\RedisTicketListCache;
+use App\Modules\Ticketing\Infrastructure\Auth\SanctumUserTokenIssuer;
 use App\Modules\Ticketing\Infrastructure\Events\LaravelEventDispatcher;
 use App\Modules\Ticketing\Infrastructure\Lock\RedisDistributedLock;
 use App\Modules\Ticketing\Infrastructure\Observability\ErrorLogQueryTelemetry;
@@ -60,6 +65,7 @@ use App\Modules\Ticketing\Infrastructure\Observability\StructuredLogger;
 use App\Modules\Ticketing\Infrastructure\Persistence\Repositories\AuthenticatedUserReadRepository;
 use App\Modules\Ticketing\Infrastructure\Persistence\Repositories\EloquentTicketCommentRepository;
 use App\Modules\Ticketing\Infrastructure\Persistence\Repositories\EloquentTicketRepository;
+use App\Modules\Ticketing\Infrastructure\Persistence\Repositories\EloquentUserAuthenticationRepository;
 use App\Modules\Ticketing\Infrastructure\Persistence\Repositories\InMemoryTicketCommentRepository;
 use App\Modules\Ticketing\Infrastructure\Persistence\Repositories\InMemoryTicketRepository;
 use App\Modules\Ticketing\Infrastructure\Queue\QueueIntegrationEventPublisher;
@@ -90,6 +96,8 @@ final class TicketingServiceProvider
                 $this->supportsEloquent() ? EloquentTicketCommentRepository::class : InMemoryTicketCommentRepository::class
             );
             $container->singleton(UserReadRepositoryPort::class, AuthenticatedUserReadRepository::class);
+            $container->singleton(UserAuthenticationRepositoryPort::class, EloquentUserAuthenticationRepository::class);
+            $container->singleton(UserTokenIssuerPort::class, SanctumUserTokenIssuer::class);
         }
 
         if (method_exists($container, 'bind')) {
@@ -115,6 +123,7 @@ final class TicketingServiceProvider
             $container->bind(CloseTicketCommandHandler::class, CloseTicketCommandHandlerService::class);
             $container->bind(ReplyTicketUseCase::class, ReplyTicketService::class);
             $container->bind(ReplyTicketCommandHandler::class, ReplyTicketCommandHandlerService::class);
+            $container->bind(AuthenticateUserUseCase::class, AuthenticateUserService::class);
         }
     }
 

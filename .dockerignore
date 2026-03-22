@@ -1,0 +1,6 @@
+.git
+.trae
+vendor
+node_modules
+storage
+bootstrap/cache

@@ -4,12 +4,43 @@
     "type": "project",
     "license": "MIT",
     "require": {
-        "php": "^8.2"
+        "php": "^8.2",
+        "laravel/framework": "^11.0",
+        "laravel/sanctum": "^4.0",
+        "predis/predis": "^2.2"
+    },
+    "require-dev": {
+        "phpstan/phpstan": "^1.11",
+        "squizlabs/php_codesniffer": "^3.10"
     },
     "autoload": {
         "psr-4": {
             "App\\": "app/"
         }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Database\\Seeders\\": "database/seeders/"
+        }
+    },
+    "scripts": {
+        "test": [
+            "php tests/RunAllTests.php"
+        ],
+        "lint:files": [
+            "php -l app/Providers/TicketingServiceProvider.php",
+            "php -l app/Modules/Ticketing/Interface/Http/Controllers/AuthController.php",
+            "php -l app/Modules/Ticketing/Infrastructure/Persistence/Repositories/EloquentUserAuthenticationRepository.php",
+            "php -l app/Modules/Ticketing/Infrastructure/Auth/SanctumUserTokenIssuer.php",
+            "php -l app/Modules/Ticketing/Interface/Http/Requests/LoginRequest.php",
+            "php -l database/seeders/ManualTestUsersSeeder.php",
+            "php -l tests/RunAllTests.php",
+            "php -l app/Modules/Ticketing/Interface/Http/Controllers/TicketController.php",
+            "php -l routes/api.php"
+        ],
+        "phpstan": [
+            "vendor/bin/phpstan analyse app --level=6"
+        ]
     },
     "minimum-stability": "stable",
     "prefer-stable": true

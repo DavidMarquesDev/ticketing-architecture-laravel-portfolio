@@ -68,14 +68,15 @@ namespace {
             require dirname(__DIR__, 4) . DIRECTORY_SEPARATOR . 'routes' . DIRECTORY_SEPARATOR . 'api.php';
 
             assertSame(['auth:sanctum', 'throttle:ticketing'], Route::$middlewares, 'Middlewares de autenticação e throttle devem ser aplicados.');
-            assertSame(7, count(Route::$routes), 'Deve registrar os sete endpoints principais de ticket.');
-            assertSame(['GET', '/tickets'], [Route::$routes[0][0], Route::$routes[0][1]], 'Primeira rota deve listar tickets.');
-            assertSame(['GET', '/tickets/{ticketId}'], [Route::$routes[1][0], Route::$routes[1][1]], 'Segunda rota deve detalhar ticket.');
-            assertSame(['GET', '/tickets/{ticketId}/comments'], [Route::$routes[2][0], Route::$routes[2][1]], 'Terceira rota deve listar comentários do ticket.');
-            assertSame(['POST', '/tickets'], [Route::$routes[3][0], Route::$routes[3][1]], 'Quarta rota deve criar ticket.');
-            assertSame(['PATCH', '/tickets/{ticketId}/assign'], [Route::$routes[4][0], Route::$routes[4][1]], 'Quinta rota deve atribuir ticket.');
-            assertSame(['POST', '/tickets/{ticketId}/reply'], [Route::$routes[5][0], Route::$routes[5][1]], 'Sexta rota deve responder ticket.');
-            assertSame(['PATCH', '/tickets/{ticketId}/close'], [Route::$routes[6][0], Route::$routes[6][1]], 'Sétima rota deve fechar ticket.');
+            assertSame(8, count(Route::$routes), 'Deve registrar login e os sete endpoints principais de ticket.');
+            assertSame(['POST', '/auth/login'], [Route::$routes[0][0], Route::$routes[0][1]], 'Primeira rota deve autenticar usuário.');
+            assertSame(['GET', '/tickets'], [Route::$routes[1][0], Route::$routes[1][1]], 'Segunda rota deve listar tickets.');
+            assertSame(['GET', '/tickets/{ticketId}'], [Route::$routes[2][0], Route::$routes[2][1]], 'Terceira rota deve detalhar ticket.');
+            assertSame(['GET', '/tickets/{ticketId}/comments'], [Route::$routes[3][0], Route::$routes[3][1]], 'Quarta rota deve listar comentários do ticket.');
+            assertSame(['POST', '/tickets'], [Route::$routes[4][0], Route::$routes[4][1]], 'Quinta rota deve criar ticket.');
+            assertSame(['PATCH', '/tickets/{ticketId}/assign'], [Route::$routes[5][0], Route::$routes[5][1]], 'Sexta rota deve atribuir ticket.');
+            assertSame(['POST', '/tickets/{ticketId}/reply'], [Route::$routes[6][0], Route::$routes[6][1]], 'Sétima rota deve responder ticket.');
+            assertSame(['PATCH', '/tickets/{ticketId}/close'], [Route::$routes[7][0], Route::$routes[7][1]], 'Oitava rota deve fechar ticket.');
         },
     ];
 
