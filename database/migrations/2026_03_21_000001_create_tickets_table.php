@@ -2,22 +2,15 @@
 
 declare(strict_types=1);
 
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 
-return new class
+return new class extends Migration
 {
     public function up(): void
     {
-        if (!class_exists('\Illuminate\Support\Facades\Schema')) {
-            return;
-        }
-
-        $schemaClass = '\Illuminate\Support\Facades\Schema';
-
-        $schemaClass::create('tickets', static function (object $table): void {
-            if (!method_exists($table, 'string')) {
-                return;
-            }
-
+        Schema::create('tickets', static function (Blueprint $table): void {
             $table->string('id')->primary();
             $table->unsignedBigInteger('requester_id');
             $table->unsignedBigInteger('assignee_id')->nullable();
@@ -35,11 +28,6 @@ return new class
 
     public function down(): void
     {
-        if (!class_exists('\Illuminate\Support\Facades\Schema')) {
-            return;
-        }
-
-        $schemaClass = '\Illuminate\Support\Facades\Schema';
-        $schemaClass::dropIfExists('tickets');
+        Schema::dropIfExists('tickets');
     }
 };

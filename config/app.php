@@ -13,8 +13,4 @@ return [
     'faker_locale' => 'pt_BR',
     'key' => env('APP_KEY'),
     'cipher' => 'AES-256-CBC',
-    'providers' => [
-        Laravel\Sanctum\SanctumServiceProvider::class,
-        App\Providers\TicketingLaravelServiceProvider::class,
-    ],
 ];
