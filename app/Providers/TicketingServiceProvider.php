@@ -78,6 +78,11 @@ use App\Modules\Ticketing\Infrastructure\Queue\RedisQueueDispatcher;
  */
 final class TicketingServiceProvider
 {
+    public function __construct(
+        private readonly ?object $containerOverride = null
+    ) {
+    }
+
     public function register(): void
     {
         $container = $this->container();
@@ -125,6 +130,7 @@ final class TicketingServiceProvider
             $container->bind(ReplyTicketCommandHandler::class, ReplyTicketCommandHandlerService::class);
             $container->bind(AuthenticateUserUseCase::class, AuthenticateUserService::class);
         }
+
     }
 
     public function boot(): void
@@ -150,6 +156,10 @@ final class TicketingServiceProvider
 
     private function container(): ?object
     {
+        if ($this->containerOverride !== null) {
+            return $this->containerOverride;
+        }
+
         if (!function_exists('app')) {
             return null;
         }
@@ -182,7 +192,7 @@ final class TicketingServiceProvider
         $rateLimiter = '\Illuminate\Support\Facades\RateLimiter';
         $limitClass = '\Illuminate\Cache\RateLimiting\Limit';
 
-        if (!class_exists($rateLimiter) || !class_exists($limitClass) || !method_exists($rateLimiter, 'for')) {
+        if (!class_exists($rateLimiter) || !class_exists($limitClass)) {
             return;
         }
 
