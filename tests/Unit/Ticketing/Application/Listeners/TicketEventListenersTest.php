@@ -23,6 +23,7 @@ use App\Modules\Ticketing\Application\Listeners\HandleTicketCreated;
 use App\Modules\Ticketing\Application\Listeners\HandleTicketReplied;
 use App\Modules\Ticketing\Application\Jobs\PublishTicketAuditJob;
 use App\Modules\Ticketing\Application\Jobs\PublishTicketLifecycleAuditJob;
+use App\Modules\Ticketing\Application\Ports\Out\IntegrationEventPublisherPort;
 use App\Modules\Ticketing\Application\Ports\Out\QueueDispatcherPort;
 use App\Modules\Ticketing\Application\Ports\Out\TicketListCachePort;
 use App\Modules\Ticketing\Domain\Events\TicketClosed;
@@ -33,7 +34,8 @@ $tests = [
     'handle_ticket_created_forgets_cache_and_dispatches_created_audit_job' => static function (): void {
         $cache = new FakeListenerTicketListCache();
         $queue = new FakeListenerQueueDispatcher();
-        $listener = new HandleTicketCreated($cache, $queue);
+        $integrationPublisher = new FakeIntegrationEventPublisher();
+        $listener = new HandleTicketCreated($cache, $queue, $integrationPublisher);
 
         $listener->handle(new TicketCreated('t-listener-1', 10));
 
@@ -41,11 +43,15 @@ $tests = [
         assertTrue($queue->lastJob instanceof PublishTicketAuditJob, 'Listener de criação deve despachar PublishTicketAuditJob.');
         assertSame('t-listener-1', $queue->lastJob->ticketId, 'Job de criação deve conter ticketId.');
         assertSame(10, $queue->lastJob->requesterId, 'Job de criação deve conter requesterId.');
+        assertSame('ticket.created.v1', $integrationPublisher->lastEventName, 'Listener de criação deve publicar evento de integração ticket.created.v1.');
+        assertSame('t-listener-1', $integrationPublisher->lastPayload['ticket_id'] ?? null, 'Evento de integração de criação deve conter ticket_id.');
+        assertSame(10, $integrationPublisher->lastPayload['requester_id'] ?? null, 'Evento de integração de criação deve conter requester_id.');
     },
     'handle_ticket_closed_forgets_cache_and_dispatches_lifecycle_job' => static function (): void {
         $cache = new FakeListenerTicketListCache();
         $queue = new FakeListenerQueueDispatcher();
-        $listener = new HandleTicketClosed($cache, $queue);
+        $integrationPublisher = new FakeIntegrationEventPublisher();
+        $listener = new HandleTicketClosed($cache, $queue, $integrationPublisher);
 
         $listener->handle(new TicketClosed('t-listener-2'));
 
@@ -54,11 +60,14 @@ $tests = [
         assertSame('t-listener-2', $queue->lastJob->ticketId, 'Job de fechamento deve conter ticketId.');
         assertSame('closed', $queue->lastJob->action, 'Job de fechamento deve conter action closed.');
         assertSame(null, $queue->lastJob->actorId, 'Job de fechamento não deve conter actorId.');
+        assertSame('ticket.closed.v1', $integrationPublisher->lastEventName, 'Listener de fechamento deve publicar evento de integração ticket.closed.v1.');
+        assertSame('t-listener-2', $integrationPublisher->lastPayload['ticket_id'] ?? null, 'Evento de integração de fechamento deve conter ticket_id.');
     },
     'handle_ticket_replied_forgets_cache_and_dispatches_lifecycle_job_with_actor' => static function (): void {
         $cache = new FakeListenerTicketListCache();
         $queue = new FakeListenerQueueDispatcher();
-        $listener = new HandleTicketReplied($cache, $queue);
+        $integrationPublisher = new FakeIntegrationEventPublisher();
+        $listener = new HandleTicketReplied($cache, $queue, $integrationPublisher);
 
         $listener->handle(new TicketReplied('t-listener-3', 'c-listener-1', 88));
 
@@ -67,6 +76,10 @@ $tests = [
         assertSame('t-listener-3', $queue->lastJob->ticketId, 'Job de resposta deve conter ticketId.');
         assertSame('replied', $queue->lastJob->action, 'Job de resposta deve conter action replied.');
         assertSame(88, $queue->lastJob->actorId, 'Job de resposta deve conter actorId.');
+        assertSame('ticket.replied.v1', $integrationPublisher->lastEventName, 'Listener de resposta deve publicar evento de integração ticket.replied.v1.');
+        assertSame('t-listener-3', $integrationPublisher->lastPayload['ticket_id'] ?? null, 'Evento de integração de resposta deve conter ticket_id.');
+        assertSame('c-listener-1', $integrationPublisher->lastPayload['comment_id'] ?? null, 'Evento de integração de resposta deve conter comment_id.');
+        assertSame(88, $integrationPublisher->lastPayload['author_id'] ?? null, 'Evento de integração de resposta deve conter author_id.');
     },
 ];
 
@@ -149,6 +162,19 @@ final class FakeListenerQueueDispatcher implements QueueDispatcherPort
     public function dispatch(object $job): void
     {
         $this->lastJob = $job;
+    }
+}
+
+final class FakeIntegrationEventPublisher implements IntegrationEventPublisherPort
+{
+    public ?string $lastEventName = null;
+
+    public array $lastPayload = [];
+
+    public function publish(string $eventName, array $payload): void
+    {
+        $this->lastEventName = $eventName;
+        $this->lastPayload = $payload;
     }
 }
 

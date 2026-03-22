@@ -19,6 +19,7 @@ use App\Modules\Ticketing\Application\QueryHandlers\GetTicketDetailsQueryHandler
 use App\Modules\Ticketing\Application\QueryHandlers\ListTicketCommentsQueryHandler;
 use App\Modules\Ticketing\Application\Ports\Out\DistributedLockPort;
 use App\Modules\Ticketing\Application\Ports\Out\EventDispatcherPort;
+use App\Modules\Ticketing\Application\Ports\Out\IntegrationEventPublisherPort;
 use App\Modules\Ticketing\Application\Ports\Out\QueueDispatcherPort;
 use App\Modules\Ticketing\Application\Ports\Out\TicketCommentRepositoryPort;
 use App\Modules\Ticketing\Application\Ports\Out\TicketListCachePort;
@@ -37,6 +38,7 @@ use App\Modules\Ticketing\Infrastructure\Lock\RedisDistributedLock;
 use App\Modules\Ticketing\Infrastructure\Persistence\Repositories\InMemoryTicketCommentRepository;
 use App\Modules\Ticketing\Infrastructure\Persistence\Repositories\InMemoryTicketRepository;
 use App\Modules\Ticketing\Infrastructure\Queue\RedisQueueDispatcher;
+use App\Modules\Ticketing\Infrastructure\Queue\QueueIntegrationEventPublisher;
 
 /**
  * Provider para bindings iniciais do módulo Ticketing.
@@ -63,6 +65,7 @@ final class TicketingServiceProvider
             $container->bind(DistributedLockPort::class, RedisDistributedLock::class);
             $container->bind(EventDispatcherPort::class, LaravelEventDispatcher::class);
             $container->bind(QueueDispatcherPort::class, RedisQueueDispatcher::class);
+            $container->bind(IntegrationEventPublisherPort::class, QueueIntegrationEventPublisher::class);
             $container->bind(CreateTicketUseCase::class, CreateTicketService::class);
             $container->bind(ListTicketsUseCase::class, ListTicketsService::class);
             $container->bind(GetTicketDetailsUseCase::class, GetTicketDetailsQueryHandler::class);

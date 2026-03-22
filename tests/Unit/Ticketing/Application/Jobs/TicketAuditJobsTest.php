@@ -19,6 +19,7 @@ spl_autoload_register(static function (string $class): void {
 });
 
 use App\Modules\Ticketing\Application\Jobs\PublishTicketAuditJob;
+use App\Modules\Ticketing\Application\Jobs\PublishTicketIntegrationEventJob;
 use App\Modules\Ticketing\Application\Jobs\PublishTicketLifecycleAuditJob;
 
 $tests = [
@@ -72,6 +73,33 @@ $tests = [
             assertTrue(str_contains($logContent, 'action=replied'), 'Job de reply deve registrar action replied.');
             assertTrue(str_contains($logContent, 'ticket_id=t-job-3'), 'Job de reply deve registrar ticket_id.');
             assertTrue(str_contains($logContent, 'actor_id=99'), 'Job de reply deve registrar actor_id.');
+        } finally {
+            ini_set('error_log', is_string($previousLogPath) ? $previousLogPath : '');
+            removeFileIfExists($logPath);
+        }
+    },
+    'publish_ticket_integration_event_job_logs_event_name_and_payload' => static function (): void {
+        $logPath = createTempLogPath('integration');
+        $previousLogPath = ini_get('error_log');
+        ini_set('error_log', $logPath);
+
+        try {
+            $job = new PublishTicketIntegrationEventJob(
+                'ticket.replied.v1',
+                [
+                    'ticket_id' => 't-job-4',
+                    'comment_id' => 'c-job-1',
+                    'author_id' => 77,
+                ]
+            );
+            $job->handle();
+            $logContent = (string) file_get_contents($logPath);
+
+            assertTrue(str_contains($logContent, 'ticket.integration.event'), 'Job de integração deve registrar tipo de log esperado.');
+            assertTrue(str_contains($logContent, 'name=ticket.replied.v1'), 'Job de integração deve registrar nome do evento.');
+            assertTrue(str_contains($logContent, '"ticket_id":"t-job-4"'), 'Job de integração deve registrar ticket_id no payload.');
+            assertTrue(str_contains($logContent, '"comment_id":"c-job-1"'), 'Job de integração deve registrar comment_id no payload.');
+            assertTrue(str_contains($logContent, '"author_id":77'), 'Job de integração deve registrar author_id no payload.');
         } finally {
             ini_set('error_log', is_string($previousLogPath) ? $previousLogPath : '');
             removeFileIfExists($logPath);
